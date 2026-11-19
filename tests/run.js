@@ -395,6 +395,141 @@ test('errors: denied camera shows a message, never a blank page', async () => {
   await ctx.close();
 });
 
+const { execFileSync } = require('child_process');
+
+function pdfInfo(file) {
+  const out = execFileSync('pdfinfo', [file]).toString();
+  const pages = Number(/Pages:\s+(\d+)/.exec(out)[1]);
+  const m = /Page size:\s+([\d.]+) x ([\d.]+) pts/.exec(out);
+  return { pages, w: Number(m[1]), h: Number(m[2]) };
+}
+
+// Render page 1 of a PDF to raw RGB pixels (via pdftoppm) for edge checks.
+function pdfPixels(file, dpi = 50) {
+  const base = file.replace(/\.pdf$/, '');
+  execFileSync('pdftoppm', ['-r', String(dpi), '-f', '1', '-l', '1', '-singlefile', file, base]);
+  const ppm = fs.readFileSync(base + '.ppm');
+  // P6\n<w> <h>\n255\n<data>
+  const header = ppm.slice(0, 64).toString('latin1');
+  const m = /^P6\s+(\d+)\s+(\d+)\s+(\d+)\s/.exec(header);
+  const w = Number(m[1]);
+  const h = Number(m[2]);
+  const data = ppm.slice(m[0].length);
+  return { w, h, at: (x, y) => [data[(y * w + x) * 3], data[(y * w + x) * 3 + 1], data[(y * w + x) * 3 + 2]] };
+}
+
+async function preparePrint(page) {
+  await page.evaluate(async () => {
+    const prep = await PB.state.prep;
+    await PB.actions.setPrintImage(prep.sheetBlob);
+  });
+}
+
+test('print: stylesheet gives one 4x6 in page, sheet edge to edge, two copies', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, { init: [syntheticCamera] });
+  await runSession(page);
+  await preparePrint(page);
+  const sheet = await page.evaluate(async () => {
+    const p = await PB.state.prep;
+    return [p.sheet.width, p.sheet.height];
+  });
+  assert.deepEqual(sheet, [1200, 1800], 'print sheet canvas is 1200x1800');
+  const file = path.join(OUT, 'print-4x6.pdf');
+  await page.pdf({ path: file, preferCSSPageSize: true, printBackground: true });
+  const info = pdfInfo(file);
+  assert.equal(info.pages, 1, 'exactly one page');
+  assert.ok(Math.abs(info.w - 288) < 0.5 && Math.abs(info.h - 432) < 0.5, `page is 4x6 in (288x432 pt), got ${info.w}x${info.h}`);
+  const px = pdfPixels(file, 50); // 200 x 300
+  const white = (p) => p[0] > 245 && p[1] > 245 && p[2] > 245;
+  // Corners and edge midpoints should be frame artwork, not white paper.
+  const probes = [[1, 1], [px.w - 2, 1], [1, px.h - 2], [px.w - 2, px.h - 2], [px.w / 2 - 2, 1], [px.w / 2 + 2, px.h - 2]];
+  for (const [x, y] of probes) assert.ok(!white(px.at(Math.round(x), Math.round(y))), `edge pixel ${x},${y} is white – sheet not edge to edge`);
+  // Both halves hold the same strip.
+  let diff = 0;
+  for (let y = 5; y < px.h; y += 7) for (let x = 3; x < px.w / 2; x += 5) {
+    const a = px.at(x, y);
+    const b = px.at(x + px.w / 2, y);
+    diff = Math.max(diff, Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+  }
+  assert.ok(diff < 40, `left and right copies differ (max channel diff ${diff})`);
+  await ctx.close();
+});
+
+test('print: "1 strip" layout leaves the right half blank; 100x148 mm option', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, { init: [syntheticCamera], settings: { ...FAST, layout: 'single', pageSize: '100x148mm' } });
+  await runSession(page);
+  await preparePrint(page);
+  const file = path.join(OUT, 'print-single-100x148.pdf');
+  await page.pdf({ path: file, preferCSSPageSize: true, printBackground: true });
+  const info = pdfInfo(file);
+  assert.equal(info.pages, 1);
+  assert.ok(Math.abs(info.w - 283.46) < 0.6 && Math.abs(info.h - 419.53) < 0.6, `page is 100x148 mm, got ${info.w}x${info.h}`);
+  const px = pdfPixels(file, 50);
+  const p = px.at(Math.round(px.w * 0.75), Math.round(px.h / 2));
+  assert.ok(p[0] > 245 && p[1] > 245 && p[2] > 245, `right half should be blank, got ${p}`);
+  const q = px.at(Math.round(px.w * 0.25), Math.round(px.h * 0.15));
+  assert.ok(!(q[0] > 245 && q[1] > 245 && q[2] > 245), 'left half holds the strip');
+  await ctx.close();
+});
+
+test('print: double tap sends one job, locks Print, counts the sheet', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, {
+    settings: { ...FAST, printLock: 60 },
+    init: [
+      () => {
+        window.__printCalls = 0;
+        window.print = () => {
+          window.__printCalls++;
+        };
+      },
+    ],
+  });
+  await runSession(page);
+  await page.evaluate(() => PB.state.prep);
+  await page.dblclick('#print-btn');
+  await page.click('#print-btn', { force: true, noWaitAfter: true, timeout: 1000 }).catch(() => {});
+  await waitForScreen(page, 'printing', 5000);
+  await shot(page, '07-printing');
+  const r = await page.evaluate(() => ({ calls: window.__printCalls, sent: PB.print.sheetsSent(), lock: PB.print.lockRemainingMs() }));
+  assert.equal(r.calls, 1, 'window.print called exactly once');
+  assert.equal(r.sent, 1, 'sheet counter is 1');
+  assert.ok(r.lock > 55000, 'print lock is running');
+  // Tap the printing screen -> back to start; next group sees Print locked.
+  await page.click('#printing');
+  await waitForScreen(page, 'booth');
+  await runSession(page);
+  const label = await page.textContent('#print-btn .label');
+  assert.ok(/Ready in \d+s/.test(label), `locked label, got "${label}"`);
+  assert.ok(await page.isDisabled('#print-btn'));
+  await shot(page, '08-review-locked');
+  // Expire the lock: the button comes back.
+  await page.evaluate(() => localStorage.setItem('stkeyclub.printLockUntil', '0'));
+  await page.waitForFunction(() => !document.querySelector('#print-btn').disabled, null, { timeout: 3000 });
+  assert.equal(await page.textContent('#print-btn .label'), 'Print');
+  await ctx.close();
+});
+
+test('print: printing screen returns to the start screen by itself', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, {
+    init: [
+      () => {
+        window.print = () => {};
+      },
+    ],
+  });
+  await runSession(page);
+  await page.click('#print-btn');
+  await waitForScreen(page, 'printing', 5000);
+  await waitForScreen(page, 'booth', 10000);
+  const photos = await page.evaluate(() => PB.state.photos.length);
+  assert.equal(photos, 0, 'photos cleared for the next group');
+  await ctx.close();
+});
+
 /* ---------------- runner ---------------- */
 
 (async () => {

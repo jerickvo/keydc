@@ -5,6 +5,7 @@ import { Camera, classifyError } from './camera.js';
 import { loadFrame } from './frame.js';
 import { cropFromVideo, composeStrip, composeSheet } from './compose.js';
 import * as sound from './sound.js';
+import { initPrint, applyPageSize, printBlob, setPrintImage, lockRemainingMs, startLock, clearLock, addSheets, sheetsSent } from './print.js';
 import { $, makeToken, wait, Cancelled, canvasToBlob, downloadBlob, timestamp, debounce, log } from './util.js';
 
 const el = {
@@ -23,6 +24,9 @@ const el = {
   review: $('#review'),
   strip: $('#strip'),
   holeButtons: $('#hole-buttons'),
+  printBtn: $('#print-btn'),
+  printLabel: $('#print-btn .label'),
+  printing: $('#printing'),
   retakeBtn: $('#retake-btn'),
   retakeLabel: $('#retake-btn .label'),
   downloadBtn: $('#download-btn'),
@@ -48,6 +52,8 @@ const state = {
   returnTo: null,
   connecting: false,
   stallRestarts: [],
+  prep: null, // Promise<{ strip, sheet, sheetBlob }> for the current photos
+  printing: false,
 };
 
 const camera = new Camera(el.video);
@@ -290,12 +296,24 @@ function showReview() {
   setRetakeMode(false);
   showScreen('review');
   setPhase('idle');
-  renderStrip();
+  refreshResult();
   hint('');
+  updatePrintButton();
 }
 
-function renderStrip() {
+// Re-render the strip and get the print sheet ready in the background, so
+// Print opens the dialog right away.
+function refreshResult() {
   composeStrip(state.frame, state.photos, { canvas: el.strip });
+  state.prep = prepareSheet();
+  state.prep.catch((e) => log.error('could not prepare the sheet', e));
+}
+
+async function prepareSheet() {
+  const strip = composeStrip(state.frame, state.photos);
+  const sheet = composeSheet(strip, { layout: settings.layout, inset: settings.printInset });
+  const sheetBlob = await canvasToBlob(sheet);
+  return { strip, sheet, sheetBlob };
 }
 
 let hintTimer = null;
@@ -330,9 +348,8 @@ async function downloadFiles() {
   if (downloading || !photosComplete()) return;
   downloading = true;
   try {
-    const strip = composeStrip(state.frame, state.photos);
-    const sheet = composeSheet(strip, { layout: settings.layout, inset: settings.printInset });
-    const [stripBlob, sheetBlob] = await Promise.all([canvasToBlob(strip), canvasToBlob(sheet)]);
+    const { strip, sheetBlob } = await (state.prep || prepareSheet());
+    const stripBlob = await canvasToBlob(strip);
     const ts = timestamp();
     downloadBlob(stripBlob, `stkeyclub-${ts}-strip.png`);
     downloadBlob(sheetBlob, `stkeyclub-${ts}-sheet.png`);
@@ -343,6 +360,51 @@ async function downloadFiles() {
   } finally {
     downloading = false;
   }
+}
+
+/* ---------------- printing ---------------- */
+
+async function printNow() {
+  if (state.screen !== 'review' || !photosComplete() || state.printing) return;
+  if (lockRemainingMs() > 0) return;
+  // Lock first, synchronously, so a second tap can never send another job.
+  state.printing = true;
+  startLock();
+  updatePrintButton();
+  try {
+    const prep = await (state.prep || prepareSheet());
+    addSheets(1);
+    log.info(`print: sheet ${sheetsSent()}`);
+    await printBlob(prep.sheetBlob);
+    showPrinting();
+  } catch (e) {
+    log.error('print failed', e);
+    clearLock();
+    hint('Could not print – try again', 5000);
+  } finally {
+    state.printing = false;
+    updatePrintButton();
+  }
+}
+
+let printingTimer = null;
+function showPrinting() {
+  setRetakeMode(false);
+  showScreen('printing');
+  clearTimeout(printingTimer);
+  printingTimer = setTimeout(leavePrinting, CONFIG.printingScreenMs);
+}
+
+function leavePrinting() {
+  clearTimeout(printingTimer);
+  if (state.screen === 'printing') goIdle();
+}
+
+function updatePrintButton() {
+  const ms = lockRemainingMs();
+  const locked = ms > 0 || state.printing;
+  el.printBtn.disabled = locked;
+  el.printLabel.textContent = ms > 0 ? `Ready in ${Math.ceil(ms / 1000)}s` : 'Print';
 }
 
 /* ---------------- camera lifecycle ---------------- */
@@ -465,6 +527,8 @@ function watchdog() {
 
 function bindUI() {
   el.startBtn.addEventListener('click', startSession);
+  el.printBtn.addEventListener('click', printNow);
+  el.printing.addEventListener('click', leavePrinting);
   el.retakeBtn.addEventListener('click', () => setRetakeMode(!state.retakeMode));
   el.downloadBtn.addEventListener('click', downloadFiles);
   el.restartBtn.addEventListener('click', goIdle);
@@ -488,6 +552,9 @@ function bindUI() {
 
   camera.addEventListener('lost', onCameraLost);
   setInterval(watchdog, 1000);
+  setInterval(() => {
+    if (state.screen === 'review') updatePrintButton();
+  }, 500);
 
   window.addEventListener('resize', debounce(renderMini, 200));
   document.addEventListener('visibilitychange', () => {
@@ -502,8 +569,10 @@ function bindUI() {
   window.addEventListener('unhandledrejection', (e) => log.error('unhandled:', e.reason));
 }
 
-function applySettings() {
+function applySettings(key) {
   el.video.classList.toggle('mirror', settings.mirrorPreview);
+  applyPageSize();
+  if ((key === 'layout' || key === 'printInset') && state.screen === 'review') refreshResult();
 }
 
 // Keep the Chromebook screen on during the event.
@@ -521,6 +590,7 @@ async function keepAwake() {
 /* ---------------- boot ---------------- */
 
 async function boot() {
+  initPrint();
   bindUI();
   applySettings();
   onSettingsChange(applySettings);
@@ -540,7 +610,8 @@ window.PB = {
   settings,
   setSetting,
   log,
-  actions: { startSession, goIdle, showReview, retake, setRetakeMode, downloadFiles, connectCamera },
+  actions: { startSession, goIdle, showReview, retake, setRetakeMode, downloadFiles, connectCamera, printNow, prepareSheet, setPrintImage },
+  print: { lockRemainingMs, sheetsSent },
   compose: { composeStrip, composeSheet, cropFromVideo },
 };
 
