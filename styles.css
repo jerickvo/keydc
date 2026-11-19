@@ -542,29 +542,6 @@ button {
   stroke: var(--teal);
 }
 
-.print-bar {
-  width: min(320px, 50vw);
-  height: 4px;
-  overflow: hidden;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.print-bar::after {
-  content: "";
-  display: block;
-  width: 35%;
-  height: 100%;
-  border-radius: 4px;
-  background: var(--grad);
-  animation: bar 1.8s var(--ease) infinite;
-}
-
-@keyframes bar {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(290%); }
-}
-
 #printing {
   cursor: pointer;
 }
