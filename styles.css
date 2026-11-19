@@ -1,0 +1,555 @@
+/* STKEYCLUB Photo Booth */
+
+:root {
+  --bg: #08050f;
+  --surface: #130b20;
+  --surface-2: #1b112d;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.2);
+  --text: #f7f2ff;
+  --muted: #a99ec3;
+  --magenta: #ff4fa3;
+  --purple: #8a4dff;
+  --teal: #3ee6d4;
+  --grad: linear-gradient(120deg, #ff4fa3 0%, #c24ad9 52%, #8a4dff 100%);
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --side: 22vh; /* width of the small strip next to the camera */
+  --frame-ar: 1 / 3;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(70vw 60vh at 6% -12%, rgba(138, 77, 255, 0.22), transparent 70%),
+    radial-gradient(60vw 55vh at 106% 112%, rgba(62, 230, 212, 0.11), transparent 70%),
+    radial-gradient(45vw 40vh at 92% -8%, rgba(255, 79, 163, 0.1), transparent 70%),
+    var(--bg);
+}
+
+.brand {
+  position: absolute;
+  top: 2.4vh;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding-left: 0.55em;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.55em;
+  color: var(--muted);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* ---------- screens ---------- */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+#app[data-screen="loading"] #loading,
+#app[data-screen="message"] #message,
+#app[data-screen="printing"] #printing {
+  display: grid;
+  place-items: center;
+}
+
+#app[data-screen="booth"] #booth,
+#app[data-screen="review"] #review {
+  display: grid;
+}
+
+/* ---------- buttons ---------- */
+
+.btn {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: clamp(60px, 10.5vh, 80px);
+  padding: 0 clamp(22px, 3vw, 36px);
+  border: 1.5px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: clamp(19px, 3.1vh, 24px);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.15s var(--ease), background-color 0.2s, border-color 0.2s, opacity 0.2s, filter 0.2s;
+}
+
+.btn svg {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.btn:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+}
+
+.btn:active {
+  transform: scale(0.97);
+  background-color: rgba(255, 255, 255, 0.11);
+}
+
+.btn:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 3px;
+}
+
+.btn-primary {
+  border: 0;
+  background: var(--grad);
+  color: #fff;
+  box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.btn-primary:hover,
+.btn-primary:active {
+  background: var(--grad);
+  filter: brightness(1.07);
+}
+
+.btn-xl {
+  min-height: clamp(76px, 13.5vh, 108px);
+  padding: 0 clamp(44px, 6vw, 80px);
+  font-size: clamp(28px, 4.8vh, 38px);
+  font-weight: 700;
+}
+
+.btn-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.btn[disabled] {
+  opacity: 0.4;
+  pointer-events: none;
+  box-shadow: none;
+}
+
+/* ---------- booth (start + capture) ---------- */
+
+/* Viewfinder and mini strip share one row and one height; Start sits under the viewfinder. */
+#booth {
+  --hole-ar: 1.4663; /* set from the frame at load */
+  --vf-h: min(66vh, calc((100vw - 14vw - var(--side)) / var(--hole-ar)));
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  justify-content: center;
+  align-content: center;
+  column-gap: 4vw;
+  row-gap: 3.4vh;
+  padding: 7vh 5vw 4vh;
+}
+
+.viewfinder {
+  --ar: var(--hole-ar);
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: center;
+  height: var(--vf-h);
+  aspect-ratio: var(--ar);
+  overflow: hidden;
+  border-radius: 12px;
+  background: #000;
+  box-shadow: 0 0 0 1px var(--line), 0 30px 80px -30px rgba(0, 0, 0, 0.9);
+  container-type: size;
+}
+
+.viewfinder > * {
+  position: absolute;
+  display: block;
+  max-width: none;
+  margin: 0;
+}
+
+#video {
+  object-fit: cover;
+  background: #000;
+}
+
+#video.mirror {
+  transform: scaleX(-1);
+}
+
+#shot {
+  display: none;
+}
+
+.viewfinder.show-shot #shot {
+  display: block;
+}
+
+#vf-frame {
+  z-index: 2;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+#vf-frame.slide {
+  transition: top 0.6s var(--ease), left 0.6s var(--ease);
+}
+
+.countdown {
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  font-size: 80cqh;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.45), 0 10px 70px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.countdown:empty {
+  display: none;
+}
+
+.countdown.pop {
+  animation: pop 1s var(--ease) both;
+}
+
+@keyframes pop {
+  0% { transform: scale(1.45); opacity: 0; }
+  16% { transform: scale(1); opacity: 1; }
+  82% { opacity: 1; }
+  100% { transform: scale(0.88); opacity: 0; }
+}
+
+.booth-actions {
+  grid-column: 1;
+  grid-row: 2;
+  display: grid;
+  place-items: center;
+  height: clamp(76px, 13.5vh, 108px);
+}
+
+.progress {
+  display: none;
+  font-size: clamp(22px, 3.8vh, 30px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+#booth:not([data-phase="idle"]) #start-btn {
+  display: none;
+}
+
+#booth:not([data-phase="idle"]) .progress {
+  display: block;
+}
+
+.mini-wrap {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  height: var(--vf-h);
+  aspect-ratio: var(--frame-ar);
+}
+
+#mini {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 5px;
+  box-shadow: 0 0 0 1px var(--line), 0 24px 70px -20px rgba(0, 0, 0, 0.85);
+}
+
+#mini-marker {
+  position: absolute;
+  display: none;
+  border-radius: 4px;
+  outline: 3px solid var(--teal);
+  outline-offset: 0;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+#mini-marker.on {
+  display: block;
+}
+
+@keyframes pulse {
+  50% { opacity: 0.35; }
+}
+
+#flash {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#flash.go {
+  animation: flash 0.6s ease-out;
+}
+
+@keyframes flash {
+  0% { opacity: 1; }
+  30% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+/* ---------- review ---------- */
+
+#review {
+  grid-template-columns: auto minmax(340px, 460px);
+  justify-content: center;
+  align-content: center;
+  align-items: center;
+  column-gap: 7vw;
+  padding: 6vh 5vw;
+}
+
+.strip-wrap {
+  position: relative;
+  height: 86vh;
+  aspect-ratio: var(--frame-ar);
+}
+
+#strip {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 5px;
+  box-shadow: 0 0 0 1px var(--line), 0 30px 90px -30px rgba(0, 0, 0, 0.95);
+}
+
+#hole-buttons {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hole-btn {
+  position: absolute;
+  display: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(8, 5, 15, 0.45);
+  box-shadow: inset 0 0 0 3px var(--teal);
+  color: #fff;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.hole-btn svg {
+  width: 30%;
+  max-width: 64px;
+  height: auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+}
+
+.hole-btn:active {
+  background: rgba(62, 230, 212, 0.25);
+}
+
+#review.retake-mode .hole-btn {
+  display: grid;
+  animation: fadein 0.25s ease both;
+}
+
+@keyframes fadein {
+  from { opacity: 0; }
+}
+
+.review-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2.4vh;
+}
+
+.review-actions .row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.4vh;
+}
+
+.review-actions .btn {
+  width: 100%;
+}
+
+.hint {
+  min-height: 1.5em;
+  margin: 0;
+  text-align: center;
+  font-size: clamp(16px, 2.6vh, 20px);
+  color: var(--muted);
+}
+
+/* ---------- loading, messages ---------- */
+
+.center-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 780px;
+  padding: 0 6vw;
+  text-align: center;
+}
+
+.center-box h1 {
+  margin: 0 0 14px;
+  font-size: clamp(32px, 6vh, 46px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.center-box p {
+  margin: 0 0 40px;
+  font-size: clamp(18px, 2.9vh, 22px);
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.msg-icon {
+  width: 84px;
+  height: 84px;
+  margin-bottom: 28px;
+  fill: none;
+  stroke: var(--magenta);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+}
+
+.spinner {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 26px;
+  border: 4px solid rgba(255, 255, 255, 0.12);
+  border-top-color: var(--magenta);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+#loading p {
+  margin: 0;
+}
+
+#boot-fail {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#boot-fail[hidden] {
+  display: none;
+}
+
+/* ---------- portrait / narrow screens (iPad bonus) ---------- */
+
+@media (max-aspect-ratio: 1/1) {
+  #booth {
+    --vf-h: calc(92vw / var(--hole-ar));
+    grid-template-columns: auto;
+    padding: 8vh 4vw 4vh;
+  }
+
+  .mini-wrap {
+    display: none;
+  }
+
+  #review {
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 5vw;
+  }
+
+  .strip-wrap {
+    height: 78vh;
+  }
+
+  .review-actions .row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .countdown.pop,
+  #mini-marker,
+  .spinner {
+    animation-duration: 0.01s;
+    animation-iteration-count: 1;
+  }
+
+  #vf-frame.slide {
+    transition: none;
+  }
+}

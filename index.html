@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="theme-color" content="#0a0612">
+  <meta name="color-scheme" content="dark">
+  <title>STKEYCLUB Photo Booth</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="js/boot-guard.js"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <main id="app" data-screen="loading">
+    <div class="brand" aria-hidden="true">STKEYCLUB</div>
+
+    <section id="loading" class="screen" aria-live="polite">
+      <div class="center-box">
+        <div class="spinner" aria-hidden="true"></div>
+        <p id="loading-text">Starting camera…</p>
+      </div>
+    </section>
+
+    <section id="booth" class="screen" data-phase="idle">
+      <div id="viewfinder" class="viewfinder">
+        <video id="video" class="mirror" autoplay muted playsinline disablepictureinpicture></video>
+        <canvas id="shot" aria-hidden="true"></canvas>
+        <img id="vf-frame" src="frame.png" alt="" draggable="false">
+        <div id="countdown" class="countdown" aria-live="assertive"></div>
+      </div>
+      <div class="mini-wrap" aria-hidden="true">
+        <canvas id="mini"></canvas>
+        <div id="mini-marker"></div>
+      </div>
+      <div class="booth-actions">
+        <button id="start-btn" class="btn btn-primary btn-xl" type="button">Start</button>
+        <div id="progress" class="progress" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section id="review" class="screen">
+      <div class="strip-wrap" id="strip-wrap">
+        <canvas id="strip" aria-label="Your photo strip"></canvas>
+        <div id="hole-buttons"></div>
+      </div>
+      <div class="review-actions">
+        <div class="row">
+          <button id="retake-btn" class="btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.64-6.36L3 8"/><path d="M3 3v5h5"/></svg>
+            <span class="label">Retake</span>
+          </button>
+          <button id="download-btn" class="btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+            <span>Download</span>
+          </button>
+        </div>
+        <button id="restart-btn" class="btn btn-quiet" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          <span>Start over</span>
+        </button>
+        <p id="review-hint" class="hint" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="message" class="screen" role="alert">
+      <div class="center-box">
+        <svg class="msg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m2 2 20 20"/><path d="M9 4h6l2 3h3a2 2 0 0 1 2 2v9"/><path d="M19.5 20H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3"/><path d="M14.12 14.12A3 3 0 1 1 9.88 9.88"/></svg>
+        <h1 id="msg-title">Camera problem</h1>
+        <p id="msg-text"></p>
+        <div class="actions">
+          <button id="msg-retry" class="btn btn-primary" type="button">Reconnect</button>
+          <button id="msg-reload" class="btn" type="button">Reload</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="flash" aria-hidden="true"></div>
+  </main>
+
+  <div id="boot-fail" hidden>
+    <div class="center-box">
+      <h1>The booth didn't start</h1>
+      <p>Check the internet connection for the first load, then reload.</p>
+      <button id="boot-reload" class="btn btn-primary" type="button">Reload</button>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,550 @@
+// STKEYCLUB Photo Booth – main flow.
+import { CONFIG } from '../config.js';
+import { settings, setSetting, onSettingsChange } from './settings.js';
+import { Camera, classifyError } from './camera.js';
+import { loadFrame } from './frame.js';
+import { cropFromVideo, composeStrip, composeSheet } from './compose.js';
+import * as sound from './sound.js';
+import { $, makeToken, wait, Cancelled, canvasToBlob, downloadBlob, timestamp, debounce, log } from './util.js';
+
+const el = {
+  app: $('#app'),
+  loadingText: $('#loading-text'),
+  booth: $('#booth'),
+  viewfinder: $('#viewfinder'),
+  video: $('#video'),
+  shot: $('#shot'),
+  vfFrame: $('#vf-frame'),
+  countdown: $('#countdown'),
+  startBtn: $('#start-btn'),
+  progress: $('#progress'),
+  mini: $('#mini'),
+  miniMarker: $('#mini-marker'),
+  review: $('#review'),
+  strip: $('#strip'),
+  holeButtons: $('#hole-buttons'),
+  retakeBtn: $('#retake-btn'),
+  retakeLabel: $('#retake-btn .label'),
+  downloadBtn: $('#download-btn'),
+  restartBtn: $('#restart-btn'),
+  reviewHint: $('#review-hint'),
+  msgTitle: $('#msg-title'),
+  msgText: $('#msg-text'),
+  msgRetry: $('#msg-retry'),
+  msgReload: $('#msg-reload'),
+  flash: $('#flash'),
+};
+
+const state = {
+  screen: 'loading',
+  phase: 'idle', // booth phase: idle | countdown | shot
+  frame: null,
+  photos: [], // full-resolution crops (canvases), one per hole
+  seq: null, // cancel token of the running capture sequence
+  seqMode: null, // 'session' | 'retake'
+  retakeMode: false,
+  cameraError: null,
+  lostDevice: null,
+  returnTo: null,
+  connecting: false,
+  stallRestarts: [],
+};
+
+const camera = new Camera(el.video);
+const RETAKE_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.64-6.36L3 8"/><path d="M3 3v5h5"/></svg>';
+
+const MESSAGES = {
+  denied: { title: 'Camera blocked', text: 'Allow camera access for this site in Chrome (camera icon in the address bar or Site settings), then tap Retry.', button: 'Retry' },
+  notfound: { title: 'No camera found', text: 'Plug in the camera. The booth starts as soon as it appears.' },
+  lost: { title: 'Camera disconnected', text: 'Plug the camera back in. It reconnects by itself, or tap Reconnect to use any available camera.' },
+  busy: { title: 'Camera is busy', text: 'Another app or tab is using the camera. Close it, then tap Reconnect.' },
+  timeout: { title: 'Camera not responding', text: 'Unplug the camera, plug it back in, then tap Reconnect.' },
+  frozen: { title: 'Camera stopped', text: 'The camera stopped sending video. Check the cable, then tap Reconnect.' },
+  capture: { title: 'Photo failed', text: 'The camera did not give a picture. Tap Reconnect to try again.' },
+  insecure: { title: 'Camera needs HTTPS', text: 'Open the https:// address of the booth (or localhost).', button: 'Retry' },
+  unknown: { title: 'Camera problem', text: 'Tap Reconnect. If it keeps happening, reload the booth.' },
+};
+
+const pct = (v, total) => `${((v / total) * 100).toFixed(4)}%`;
+
+/* ---------------- screens ---------------- */
+
+function showScreen(name) {
+  state.screen = name;
+  el.app.dataset.screen = name;
+  if (name === 'booth') {
+    camera.resetWatchdog();
+    const p = el.video.play();
+    if (p && p.catch) p.catch(() => {});
+  }
+}
+
+function setPhase(p) {
+  state.phase = p;
+  el.booth.dataset.phase = p;
+  camera.resetWatchdog();
+}
+
+function setLoading(text) {
+  el.loadingText.textContent = text;
+}
+
+function photosComplete() {
+  return state.photos.length === CONFIG.shots && state.photos.every(Boolean);
+}
+
+/* ---------------- frame + viewfinder ---------------- */
+
+function applyFrame() {
+  const f = state.frame;
+  document.documentElement.style.setProperty('--frame-ar', `${f.width} / ${f.height}`);
+  el.booth.style.setProperty('--hole-ar', (f.holes[0].w / f.holes[0].h).toFixed(5));
+  if (f.source !== 'file') el.vfFrame.src = f.image.src;
+  buildHoleButtons();
+  setViewfinderHole(0, false);
+  renderMini();
+}
+
+// Show hole i in the viewfinder: the live video fills the hole (plus bleed)
+// exactly like the final composite, the frame sits on top, and the view is
+// cropped to the hole. Everything is in percentages of the hole, so it stays
+// correct at any screen size.
+function setViewfinderHole(i, slide) {
+  const f = state.frame;
+  if (!f) return;
+  const h = f.holes[i];
+  const b = f.photoBoxes[i];
+  el.viewfinder.style.setProperty('--ar', (h.w / h.h).toFixed(5));
+  for (const node of [el.video, el.shot]) {
+    node.style.left = pct(b.x - h.x, h.w);
+    node.style.top = pct(b.y - h.y, h.h);
+    node.style.width = pct(b.w, h.w);
+    node.style.height = pct(b.h, h.h);
+  }
+  el.vfFrame.classList.toggle('slide', !!slide);
+  el.vfFrame.style.left = pct(-h.x, h.w);
+  el.vfFrame.style.top = pct(-h.y, h.h);
+  el.vfFrame.style.width = pct(f.width, h.w);
+  el.vfFrame.style.height = pct(f.height, h.h);
+}
+
+function renderMini() {
+  const f = state.frame;
+  if (!f) return;
+  const cssH = Math.max(240, window.innerHeight * 0.66);
+  const k = Math.min(1, (cssH * Math.min(2, window.devicePixelRatio || 1)) / f.height);
+  composeStrip(f, state.photos, { scale: k, canvas: el.mini });
+}
+
+function markMini(i) {
+  const f = state.frame;
+  if (!f || i < 0) {
+    el.miniMarker.classList.remove('on');
+    return;
+  }
+  const h = f.holes[i];
+  el.miniMarker.style.left = pct(h.x, f.width);
+  el.miniMarker.style.top = pct(h.y, f.height);
+  el.miniMarker.style.width = pct(h.w, f.width);
+  el.miniMarker.style.height = pct(h.h, f.height);
+  el.miniMarker.classList.add('on');
+}
+
+function buildHoleButtons() {
+  const f = state.frame;
+  el.holeButtons.textContent = '';
+  f.holes.forEach((h, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'hole-btn';
+    b.dataset.index = String(i);
+    b.setAttribute('aria-label', `Retake photo ${i + 1}`);
+    b.style.left = pct(h.x, f.width);
+    b.style.top = pct(h.y, f.height);
+    b.style.width = pct(h.w, f.width);
+    b.style.height = pct(h.h, f.height);
+    b.innerHTML = RETAKE_ICON;
+    b.addEventListener('click', () => retake(i));
+    el.holeButtons.appendChild(b);
+  });
+}
+
+/* ---------------- capture flow ---------------- */
+
+function showCount(n) {
+  const c = el.countdown;
+  c.textContent = n ? String(n) : '';
+  c.classList.remove('pop');
+  if (n) {
+    void c.offsetWidth; // restart the animation
+    c.classList.add('pop');
+  }
+}
+
+function flash() {
+  const f = el.flash;
+  f.classList.remove('go');
+  void f.offsetWidth;
+  f.classList.add('go');
+}
+
+function showShot(photo) {
+  const c = el.shot;
+  c.width = photo.width;
+  c.height = photo.height;
+  c.getContext('2d').drawImage(photo, 0, 0);
+  el.viewfinder.classList.add('show-shot');
+}
+
+function hideShot() {
+  el.viewfinder.classList.remove('show-shot');
+}
+
+function cancelSequence() {
+  if (state.seq) state.seq.cancel();
+}
+
+async function startSession() {
+  if (state.screen !== 'booth' || state.phase !== 'idle') return;
+  if (!camera.ready) {
+    if (!camera.running) showCameraError('lost');
+    return;
+  }
+  sound.unlockAudio();
+  state.photos = new Array(CONFIG.shots).fill(null);
+  renderMini();
+  const ok = await runShots(state.photos.map((_, i) => i), 'session');
+  if (ok) showReview();
+  else if (state.screen === 'booth') goIdle();
+}
+
+// Countdown + capture for each hole index. Resolves true when all shots were
+// taken, false when cancelled (camera lost, operator menu, ...).
+async function runShots(indices, mode) {
+  cancelSequence();
+  const token = makeToken();
+  state.seq = token;
+  state.seqMode = mode;
+  showScreen('booth');
+  try {
+    for (let k = 0; k < indices.length; k++) {
+      const i = indices[k];
+      hideShot();
+      setViewfinderHole(i, k > 0);
+      markMini(i);
+      el.progress.textContent = mode === 'retake' ? `Retake photo ${i + 1}` : `Photo ${i + 1} of ${CONFIG.shots}`;
+      setPhase('countdown');
+      for (let n = settings.countdown; n >= 1; n--) {
+        showCount(n);
+        if (settings.sound) sound.tick();
+        await wait(1000, token);
+      }
+      showCount('');
+      if (!camera.ready) throw new Error('camera not ready');
+      const photo = cropFromVideo(el.video, state.frame.photoBoxes[i], settings.mirrorPhoto);
+      if (settings.flash) flash();
+      if (settings.sound) sound.shutter();
+      state.photos[i] = photo;
+      showShot(photo);
+      setPhase('shot');
+      renderMini();
+      await wait(settings.pause * 1000, token);
+    }
+    return true;
+  } catch (e) {
+    if (e instanceof Cancelled) return false;
+    log.error('capture failed', e);
+    if (mode === 'retake') state.returnTo = 'review';
+    if (state.seq === token) state.seq = null;
+    showCameraError(camera.running ? 'capture' : 'lost');
+    return false;
+  } finally {
+    if (state.seq === token) state.seq = null;
+    showCount('');
+    markMini(-1);
+  }
+}
+
+function goIdle() {
+  cancelSequence();
+  state.photos = [];
+  setRetakeMode(false);
+  if (!camera.running) {
+    showCameraError(state.cameraError || 'lost');
+    return;
+  }
+  hideShot();
+  showScreen('booth');
+  setPhase('idle');
+  setViewfinderHole(0, false);
+  markMini(-1);
+  el.progress.textContent = '';
+  renderMini();
+}
+
+/* ---------------- review ---------------- */
+
+function showReview() {
+  hideShot();
+  setRetakeMode(false);
+  showScreen('review');
+  setPhase('idle');
+  renderStrip();
+  hint('');
+}
+
+function renderStrip() {
+  composeStrip(state.frame, state.photos, { canvas: el.strip });
+}
+
+let hintTimer = null;
+function hint(text, ms = 0) {
+  clearTimeout(hintTimer);
+  el.reviewHint.textContent = text;
+  if (ms) hintTimer = setTimeout(() => (el.reviewHint.textContent = ''), ms);
+}
+
+function setRetakeMode(on) {
+  state.retakeMode = !!on;
+  el.review.classList.toggle('retake-mode', state.retakeMode);
+  el.retakeLabel.textContent = state.retakeMode ? 'Cancel' : 'Retake';
+  if (state.screen === 'review') hint(state.retakeMode ? 'Tap a photo to retake it' : '');
+}
+
+async function retake(i) {
+  if (!state.retakeMode || state.screen !== 'review') return;
+  setRetakeMode(false);
+  if (!camera.ready) {
+    state.returnTo = 'review';
+    showCameraError(camera.running ? 'timeout' : 'lost');
+    return;
+  }
+  sound.unlockAudio();
+  await runShots([i], 'retake');
+  if (state.screen === 'booth') showReview();
+}
+
+let downloading = false;
+async function downloadFiles() {
+  if (downloading || !photosComplete()) return;
+  downloading = true;
+  try {
+    const strip = composeStrip(state.frame, state.photos);
+    const sheet = composeSheet(strip, { layout: settings.layout, inset: settings.printInset });
+    const [stripBlob, sheetBlob] = await Promise.all([canvasToBlob(strip), canvasToBlob(sheet)]);
+    const ts = timestamp();
+    downloadBlob(stripBlob, `stkeyclub-${ts}-strip.png`);
+    downloadBlob(sheetBlob, `stkeyclub-${ts}-sheet.png`);
+    hint('Saved to Downloads', 4000);
+  } catch (e) {
+    log.error('download failed', e);
+    hint('Download failed', 4000);
+  } finally {
+    downloading = false;
+  }
+}
+
+/* ---------------- camera lifecycle ---------------- */
+
+let connectSeq = 0;
+
+async function connectCamera({ strict = false, quiet = false, deviceId, label } = {}) {
+  const my = ++connectSeq;
+  state.connecting = true;
+  if (!quiet && state.screen !== 'review' && state.screen !== 'printing') {
+    setLoading('Starting camera…');
+    showScreen('loading');
+  }
+  try {
+    const info = await camera.start({
+      deviceId: deviceId ?? settings.cameraId,
+      label: label ?? settings.cameraLabel,
+      strict,
+      onPrompt: () => setLoading('Allow camera access to start'),
+    });
+    if (my !== connectSeq) return false;
+    if (info.autoPicked && info.deviceId) {
+      setSetting('cameraId', info.deviceId);
+      setSetting('cameraLabel', info.label);
+    }
+    log.info(`camera on: ${info.label || 'default camera'} ${info.width}x${info.height}`);
+    state.cameraError = null;
+    state.lostDevice = null;
+    afterCameraReady();
+    return true;
+  } catch (e) {
+    const kind = classifyError(e);
+    if (my !== connectSeq || kind === 'superseded') return false;
+    log.warn('camera start failed:', kind, e.cause || e.message);
+    if (!quiet || state.screen === 'loading') showCameraError(kind);
+    return false;
+  } finally {
+    if (my === connectSeq) state.connecting = false;
+  }
+}
+
+function afterCameraReady() {
+  if (state.screen === 'review' || state.screen === 'printing') return; // guests are busy; the camera is back for later
+  const back = state.returnTo;
+  state.returnTo = null;
+  if (back === 'review' && photosComplete()) showReview();
+  else goIdle();
+}
+
+function showCameraError(kind) {
+  state.cameraError = kind;
+  cancelSequence();
+  const m = MESSAGES[kind] || MESSAGES.unknown;
+  el.msgTitle.textContent = m.title;
+  el.msgText.textContent = m.text;
+  el.msgRetry.textContent = m.button || 'Reconnect';
+  showScreen('message');
+  scheduleAutoRetry();
+}
+
+let retryTimer = null;
+const AUTO_RETRY = ['lost', 'notfound', 'busy', 'timeout', 'frozen', 'capture', 'unknown'];
+
+// While a camera message is showing, keep trying quietly. After an unplug we
+// only reconnect the same camera; Reconnect (manual) may use any camera.
+function scheduleAutoRetry() {
+  clearTimeout(retryTimer);
+  if (!AUTO_RETRY.includes(state.cameraError)) return;
+  retryTimer = setTimeout(async () => {
+    if (state.screen !== 'message' || !AUTO_RETRY.includes(state.cameraError)) return;
+    if (state.connecting) {
+      scheduleAutoRetry();
+      return;
+    }
+    const lost = state.lostDevice || {};
+    const deviceId = settings.cameraId || lost.deviceId || '';
+    const label = settings.cameraLabel || lost.label || '';
+    const strict = state.cameraError !== 'notfound' && !!(deviceId || label);
+    const ok = await connectCamera({ strict, quiet: true, deviceId, label });
+    if (!ok && state.screen === 'message') scheduleAutoRetry();
+  }, 3000);
+}
+
+function onCameraLost(e) {
+  log.warn('camera lost:', e.detail && e.detail.reason);
+  state.lostDevice = { deviceId: camera.deviceId, label: camera.label };
+  if (state.screen === 'review' || state.screen === 'printing') {
+    state.cameraError = 'lost'; // tell them after the guests are done
+    return;
+  }
+  if (state.seq && state.seqMode === 'retake') state.returnTo = 'review';
+  showCameraError('lost');
+}
+
+// A camera that is "connected" but sends no frames would silently produce
+// identical photos, so treat a stalled stream like a disconnect.
+function watchdog() {
+  if (document.visibilityState !== 'visible' || state.screen !== 'booth' || state.phase === 'shot' || !camera.running) {
+    camera.resetWatchdog();
+    return;
+  }
+  if (camera.msSinceFrame() < CONFIG.camera.frozenAfterMs) return;
+  const now = Date.now();
+  state.stallRestarts = state.stallRestarts.filter((t) => now - t < 60000);
+  camera.resetWatchdog();
+  if (state.stallRestarts.length >= 2) {
+    log.error('camera stalled repeatedly');
+    camera.stop();
+    showCameraError('frozen');
+    return;
+  }
+  state.stallRestarts.push(now);
+  log.warn('camera stalled, restarting it');
+  if (state.seq && state.seqMode === 'retake') state.returnTo = 'review';
+  cancelSequence();
+  connectCamera({ deviceId: camera.deviceId, label: camera.label });
+}
+
+/* ---------------- input ---------------- */
+
+function bindUI() {
+  el.startBtn.addEventListener('click', startSession);
+  el.retakeBtn.addEventListener('click', () => setRetakeMode(!state.retakeMode));
+  el.downloadBtn.addEventListener('click', downloadFiles);
+  el.restartBtn.addEventListener('click', goIdle);
+  el.msgRetry.addEventListener('click', () => connectCamera({ strict: false }));
+  el.msgReload.addEventListener('click', () => location.reload());
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target && e.target.closest && e.target.closest('input, select, textarea')) return;
+    if ((e.key === ' ' || e.key === 'Enter') && state.screen === 'booth') {
+      e.preventDefault();
+      if (!e.repeat) startSession();
+      return;
+    }
+    if (e.key === 'Escape' && state.retakeMode) setRetakeMode(false);
+  });
+
+  document.addEventListener('contextmenu', (e) => {
+    if (!(e.target && e.target.closest && e.target.closest('input, textarea'))) e.preventDefault();
+  });
+  document.addEventListener('dragstart', (e) => e.preventDefault());
+
+  camera.addEventListener('lost', onCameraLost);
+  setInterval(watchdog, 1000);
+
+  window.addEventListener('resize', debounce(renderMini, 200));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      keepAwake();
+      camera.resetWatchdog();
+      if (state.screen === 'booth') el.video.play().catch(() => {});
+    }
+  });
+
+  window.addEventListener('error', (e) => log.error('error:', e.message));
+  window.addEventListener('unhandledrejection', (e) => log.error('unhandled:', e.reason));
+}
+
+function applySettings() {
+  el.video.classList.toggle('mirror', settings.mirrorPreview);
+}
+
+// Keep the Chromebook screen on during the event.
+let wakeLock = null;
+async function keepAwake() {
+  try {
+    if (!('wakeLock' in navigator) || wakeLock || document.visibilityState !== 'visible') return;
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => (wakeLock = null));
+  } catch {
+    wakeLock = null;
+  }
+}
+
+/* ---------------- boot ---------------- */
+
+async function boot() {
+  bindUI();
+  applySettings();
+  onSettingsChange(applySettings);
+  window.__pbBooted = true;
+  keepAwake();
+  setLoading('Loading…');
+  state.frame = await loadFrame();
+  applyFrame();
+  await connectCamera();
+}
+
+// Handle for debugging and automated tests.
+window.PB = {
+  CONFIG,
+  state,
+  camera,
+  settings,
+  setSetting,
+  log,
+  actions: { startSession, goIdle, showReview, retake, setRetakeMode, downloadFiles, connectCamera },
+  compose: { composeStrip, composeSheet, cropFromVideo },
+};
+
+boot().catch((e) => {
+  log.error('boot failed', e);
+  showCameraError('unknown');
+});
