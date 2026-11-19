@@ -60,6 +60,8 @@ const state = {
   prep: null, // Promise<{ strip, sheet, sheetBlob }> for the current photos
   printing: false,
   pendingSwitch: false, // switch back to the chosen camera when the booth is idle
+  pendingReload: false, // a new version was installed; reload when the booth is idle
+  version: '',
   lastActivity: Date.now(),
 };
 
@@ -300,6 +302,7 @@ function goIdle() {
   markMini(-1);
   el.progress.textContent = '';
   renderMini();
+  if (state.pendingReload && reloadIfIdle()) return;
   if (state.pendingSwitch && !isOperatorOpen()) {
     state.pendingSwitch = false;
     connectCamera();
@@ -632,6 +635,7 @@ function onOperatorOpen() {
 
 function onOperatorClose() {
   state.lastActivity = Date.now();
+  if (state.pendingReload && reloadIfIdle()) return;
   if (state.screen === 'booth' && state.phase === 'idle' && state.pendingSwitch) goIdle();
 }
 
@@ -640,7 +644,57 @@ function frameInfo() {
   if (!f) return '';
   const holes = f.holeSource === 'detected' ? 'holes detected' : 'holes from config.js';
   const src = f.source === 'file' ? 'frame.png' : 'PLAIN FRAME (frame.png missing)';
-  return `${src} ${f.width}×${f.height} · ${holes}${f.warnings.length ? ' · ' + f.warnings.join('; ') : ''}`;
+  const offline = state.version ? `offline ready (${state.version})` : 'not cached for offline yet';
+  return `${src} ${f.width}×${f.height} · ${holes}${f.warnings.length ? ' · ' + f.warnings.join('; ') : ''} · ${offline}`;
+}
+
+/* ---------------- offline / updates ---------------- */
+
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  let controller = navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    const hadController = !!controller;
+    controller = navigator.serviceWorker.controller;
+    readVersion();
+    if (!hadController) return; // first install: nothing to reload
+    log.info('new version installed');
+    state.pendingReload = true;
+    reloadIfIdle();
+  });
+  navigator.serviceWorker
+    .register('sw.js')
+    .then((reg) => {
+      readVersion();
+      // While online, look for a new version every 30 minutes.
+      setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+    })
+    .catch((e) => log.warn('offline support unavailable', e));
+}
+
+async function readVersion() {
+  try {
+    const keys = (await caches.keys()).filter((k) => k.startsWith('stkeyclub-'));
+    state.version = keys.length ? keys[keys.length - 1].replace('stkeyclub-', 'v') : '';
+  } catch {
+    state.version = '';
+  }
+}
+
+// Reload into the new version, but only when nobody is using the booth.
+function reloadIfIdle() {
+  if (!state.pendingReload) return false;
+  if (state.screen !== 'booth' || state.phase !== 'idle' || isOperatorOpen()) return false;
+  try {
+    const last = Number(sessionStorage.getItem('stkeyclub.reloadAt') || 0);
+    if (Date.now() - last < 15000) return false; // never loop
+    sessionStorage.setItem('stkeyclub.reloadAt', String(Date.now()));
+  } catch {
+    /* ignore */
+  }
+  log.info('reloading into the new version');
+  location.reload();
+  return true;
 }
 
 /* ---------------- input ---------------- */
@@ -757,6 +811,7 @@ async function boot() {
   onSettingsChange(applySettings);
   window.__pbBooted = true;
   keepAwake();
+  registerServiceWorker();
   setLoading('Loading…');
   state.frame = await loadFrame();
   applyFrame();

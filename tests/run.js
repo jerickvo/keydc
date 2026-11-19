@@ -40,7 +40,7 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
-function startServer(port = 0) {
+function startServer(port = 0, overrides = {}) {
   const sockets = new Set();
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -60,7 +60,7 @@ function startServer(port = 0) {
         'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
         'Cache-Control': 'no-cache',
       });
-      res.end(data);
+      res.end(overrides[p] ? overrides[p](data) : data);
     });
   });
   server.on('connection', (s) => {
@@ -806,6 +806,97 @@ test('errors: denied camera has Retry and a way into the operator menu', async (
   assert.equal(await page.textContent('#msg-retry'), 'Retry');
   await page.click('#msg-settings');
   await page.waitForSelector('#operator:not([hidden])');
+  await ctx.close();
+});
+
+test('offline: precache list covers every app file', async () => {
+  const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
+  const listed = new Set(JSON.parse('[' + /const ASSETS = \[([\s\S]*?)\];/.exec(sw)[1].replace(/'/g, '"').replace(/,\s*$/, '') + ']'));
+  for (const f of listed) {
+    if (f === './') continue;
+    assert.ok(fs.existsSync(path.join(ROOT, f)), `sw.js lists a missing file: ${f}`);
+  }
+  const needed = ['index.html', 'styles.css', 'config.js', 'frame.png', 'manifest.webmanifest'];
+  for (const f of fs.readdirSync(path.join(ROOT, 'js'))) needed.push('js/' + f);
+  for (const f of fs.readdirSync(path.join(ROOT, 'icons'))) needed.push('icons/' + f);
+  for (const f of needed) assert.ok(listed.has(f), `${f} is not in the sw.js ASSETS list (it would be missing offline)`);
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.webmanifest'), 'utf8'));
+  for (const icon of manifest.icons) assert.ok(fs.existsSync(path.join(ROOT, icon.src)), `manifest icon missing: ${icon.src}`);
+});
+
+test('offline: after one visit the booth loads and works with no network at all', async () => {
+  const own = await startServer();
+  const ctx = await newContext({ serviceWorkers: 'allow' });
+  try {
+    const page = await openApp(ctx, { url: own.url });
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 15000 });
+    await page.waitForFunction(async () => (await caches.keys()).some((k) => k.startsWith('stkeyclub-')));
+    // Kill the server and cut the network.
+    await own.close();
+    await ctx.setOffline(true);
+    const failed = [];
+    page.on('requestfailed', (r) => failed.push(r.url()));
+    await page.reload();
+    await waitForScreen(page, 'booth', 20000);
+    const f = await page.evaluate(() => ({ src: PB.state.frame.source, holes: PB.state.frame.holeSource }));
+    assert.deepEqual(f, { src: 'file', holes: 'detected' }, 'frame.png came from the offline cache');
+    await runSession(page);
+    await preparePrint(page);
+    const file = path.join(OUT, 'offline-print.pdf');
+    await page.pdf({ path: file, preferCSSPageSize: true });
+    assert.equal(pdfInfo(file).pages, 1);
+    // A brand new tab also opens offline.
+    const page2 = await ctx.newPage();
+    await page2.goto(own.url);
+    await waitForScreen(page2, 'booth', 20000);
+    assert.deepEqual(failed, [], 'no request failed while offline');
+    await page2.keyboard.press('o');
+    await page2.waitForFunction(() => /offline ready \(v/.test(document.querySelector('#op-info').textContent));
+  } finally {
+    await ctx.close();
+    await own.close();
+  }
+});
+
+test('offline: a new version replaces the old cache and reloads when idle', async () => {
+  let bump = false;
+  const own = await startServer(0, {
+    '/sw.js': (buf) => (bump ? Buffer.from(buf.toString().replace(/const VERSION = '[^']*'/, "const VERSION = 'test-2'")) : buf),
+  });
+  const ctx = await newContext({ serviceWorkers: 'allow' });
+  try {
+    const page = await openApp(ctx, { url: own.url });
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 15000 });
+    const before = await page.evaluate(async () => (await caches.keys()).filter((k) => k.startsWith('stkeyclub-')));
+    assert.equal(before.length, 1);
+    // Guests are on the review screen when the update arrives: no reload yet.
+    await runSession(page);
+    await page.evaluate(() => (window.__marker = 1));
+    bump = true;
+    await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
+    await page.waitForFunction(() => PB.state.pendingReload === true, null, { timeout: 15000 });
+    await page.waitForTimeout(500);
+    assert.equal(await page.evaluate(() => window.__marker), 1, 'did not reload in the middle of a session');
+    // Start over -> idle -> reload into the new version.
+    await page.click('#restart-btn');
+    await page.waitForFunction(() => window.__marker === undefined && window.PB && PB.state.screen === 'booth', null, { timeout: 20000 });
+    const after = await page.evaluate(async () => (await caches.keys()).filter((k) => k.startsWith('stkeyclub-')));
+    assert.deepEqual(after, ['stkeyclub-test-2'], 'old cache deleted, new one in use');
+  } finally {
+    await ctx.close();
+    await own.close();
+  }
+});
+
+test('pwa: Chrome reports the app as installable', async () => {
+  const ctx = await newContext({ serviceWorkers: 'allow' });
+  const page = await openApp(ctx);
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 15000 });
+  const cdp = await ctx.newCDPSession(page);
+  const { installabilityErrors } = await cdp.send('Page.getInstallabilityErrors');
+  assert.deepEqual(installabilityErrors, [], JSON.stringify(installabilityErrors));
+  const manifest = await cdp.send('Page.getAppManifest');
+  assert.deepEqual(manifest.errors, []);
   await ctx.close();
 });
 
