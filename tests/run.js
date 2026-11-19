@@ -758,6 +758,21 @@ test('errors: unplug mid-countdown cancels; unplug on review waits for the guest
   await ctx.close();
 });
 
+test('errors: camera unplugged and replugged during review reconnects in the background', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, { init: [controllableCamera] });
+  await runSession(page);
+  await page.evaluate(() => window.__unplug());
+  await page.waitForTimeout(2500); // background retry fails quietly while unplugged
+  assert.equal(await page.evaluate(() => PB.state.screen), 'review');
+  await page.evaluate(() => window.__plug());
+  await page.waitForFunction(() => PB.camera.running, null, { timeout: 8000 });
+  assert.equal(await page.evaluate(() => PB.state.screen), 'review', 'guests were never interrupted');
+  await page.click('#restart-btn');
+  await waitForScreen(page, 'booth', 3000);
+  await ctx.close();
+});
+
 test('errors: no camera at all shows "No camera found"', async () => {
   const ctx = await newContext();
   const page = await openApp(ctx, {
@@ -1011,6 +1026,56 @@ test('filters: the operator can turn filters off', async () => {
   await page.keyboard.press('Escape');
   assert.ok(await page.isHidden('#filters-btn'), 'Filters button hidden');
   assert.equal(await page.evaluate(() => PB.state.filter), 'none', 'filter reset to None');
+  await ctx.close();
+});
+
+test('layout: every screen fits without scrolling at common Chromebook sizes', async () => {
+  const sizes = [
+    [1366, 768],
+    [1280, 720],
+    [1536, 864],
+    [1920, 1080],
+    [1280, 800],
+    [1200, 800],
+    [1366, 657], // windowed Chrome (tabs + address bar)
+    [1024, 768],
+  ];
+  const ctx = await newContext();
+  const page = await openApp(ctx, { init: [syntheticCamera] });
+  const check = async (label, selectors) => {
+    const r = await page.evaluate((sels) => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const bad = [];
+      for (const sel of sels) {
+        const el = document.querySelector(sel);
+        if (!el) {
+          bad.push(`${sel} missing`);
+          continue;
+        }
+        const b = el.getBoundingClientRect();
+        if (b.width === 0 || b.height === 0) bad.push(`${sel} not visible`);
+        else if (b.left < -1 || b.top < -1 || b.right > vw + 1 || b.bottom > vh + 1) bad.push(`${sel} outside ${vw}x${vh}: ${Math.round(b.left)},${Math.round(b.top)},${Math.round(b.right)},${Math.round(b.bottom)}`);
+      }
+      const se = document.scrollingElement;
+      if (se.scrollHeight > vh + 1 || se.scrollWidth > vw + 1) bad.push('page scrolls');
+      return bad;
+    }, selectors);
+    assert.deepEqual(r, [], label);
+  };
+  for (const [w, h] of sizes) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.evaluate(() => PB.actions.goIdle());
+    await page.waitForTimeout(150);
+    await check(`start ${w}x${h}`, ['#viewfinder', '#start-btn', '.mini-wrap']);
+    if (w === 1280 && h === 800) await shot(page, `15-start-${w}x${h}`);
+    await runSession(page);
+    await check(`review ${w}x${h}`, ['.strip-wrap', '#print-btn', '#retake-btn', '#filters-btn', '#download-btn', '#restart-btn']);
+    await page.click('#filters-btn');
+    await check(`filters ${w}x${h}`, ['.strip-wrap', '.filter-list', '#filters-done']);
+    if (w === 1024 && h === 768) await shot(page, `16-filters-${w}x${h}`);
+    await page.click('#filters-done');
+  }
   await ctx.close();
 });
 

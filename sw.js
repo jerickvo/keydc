@@ -4,7 +4,7 @@
 // >>> Bump VERSION on every deploy (and whenever frame.png changes). <<<
 // A new VERSION makes browsers download a fresh copy of every file below and
 // delete the old cache; the booth reloads itself the next time it is idle.
-const VERSION = '2026-11-19.2';
+const VERSION = '2026-11-19.3';
 const CACHE = `stkeyclub-${VERSION}`;
 
 const ASSETS = [

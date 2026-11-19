@@ -297,10 +297,11 @@ function goIdle() {
   cancelSequence();
   state.photos = [];
   state.filter = 'none';
+  state.returnTo = null;
   setRetakeMode(false);
   setFiltersOpen(false);
   if (!camera.running) {
-    showCameraError(state.cameraError || 'lost');
+    showCameraError(state.cameraError || 'lost', true);
     return;
   }
   hideShot();
@@ -321,6 +322,7 @@ function goIdle() {
 
 function showReview() {
   hideShot();
+  state.returnTo = null;
   setRetakeMode(false);
   setFiltersOpen(false);
   showScreen('review');
@@ -405,7 +407,7 @@ async function retake(i) {
   setRetakeMode(false);
   if (!camera.ready) {
     state.returnTo = 'review';
-    showCameraError(camera.running ? 'timeout' : 'lost');
+    showCameraError(camera.running ? 'timeout' : 'lost', true);
     return;
   }
   sound.unlockAudio();
@@ -443,10 +445,10 @@ async function printNow() {
   updatePrintButton();
   try {
     const prep = await (state.prep || prepareSheet());
+    storeSheet(prep); // in the background; never delays printing
+    await printBlob(prep.sheetBlob); // returns when the print dialog closes
     addSheets(1);
     log.info(`print: sheet ${sheetsSent()}`);
-    storeSheet(prep); // in the background; never delays printing
-    await printBlob(prep.sheetBlob);
     showPrinting();
   } catch (e) {
     log.error('print failed', e);
@@ -475,8 +477,8 @@ async function storeSheet(prep) {
 // Operator prints skip the guest print lock but restart it.
 async function operatorPrint(blob) {
   startLock();
-  addSheets(1);
   await printBlob(blob);
+  addSheets(1);
   updatePrintButton();
 }
 
@@ -563,9 +565,14 @@ function afterCameraReady() {
   else goIdle();
 }
 
-function showCameraError(kind) {
+// force: show it even if guests are on the review/printing screen.
+function showCameraError(kind, force = false) {
   state.cameraError = kind;
   cancelSequence();
+  if (!force && (state.screen === 'review' || state.screen === 'printing')) {
+    log.warn(`camera problem (${kind}); shown after the guests are done`);
+    return;
+  }
   const m = MESSAGES[kind] || MESSAGES.unknown;
   el.msgTitle.textContent = m.title;
   el.msgText.textContent = m.text;
@@ -619,7 +626,19 @@ async function onDeviceChange() {
     clearTimeout(retryTimer);
     retryTimer = null;
     scheduleAutoRetry(300);
+  } else if (state.screen === 'review' || state.screen === 'printing') {
+    reconnectInBackground();
   }
+}
+
+// Camera came back (or may have) while guests are on the review screen:
+// reconnect quietly so the booth is ready when they finish.
+function reconnectInBackground() {
+  if (camera.running || state.connecting) return;
+  const lost = state.lostDevice || {};
+  const deviceId = settings.cameraId || lost.deviceId || '';
+  const label = settings.cameraLabel || lost.label || '';
+  connectCamera({ strict: !!(deviceId || label), quiet: true, deviceId, label });
 }
 
 function onCameraLost(e) {
@@ -627,6 +646,7 @@ function onCameraLost(e) {
   state.lostDevice = { deviceId: camera.deviceId, label: camera.label };
   if (state.screen === 'review' || state.screen === 'printing') {
     state.cameraError = 'lost'; // tell them after the guests are done
+    setTimeout(reconnectInBackground, 1500);
     return;
   }
   if (state.seq && state.seqMode === 'retake') state.returnTo = 'review';
@@ -795,6 +815,7 @@ function bindUI() {
   }
   setInterval(idleCheck, 250);
   setInterval(watchdog, 1000);
+  setInterval(keepAwake, 30000);
   setInterval(() => {
     if (state.screen === 'review') updatePrintButton();
   }, 500);
