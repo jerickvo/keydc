@@ -6,11 +6,15 @@ import { loadFrame } from './frame.js';
 import { cropFromVideo, composeStrip, composeSheet } from './compose.js';
 import * as sound from './sound.js';
 import { initPrint, applyPageSize, printBlob, setPrintImage, lockRemainingMs, startLock, clearLock, addSheets, sheetsSent } from './print.js';
-import { $, makeToken, wait, Cancelled, canvasToBlob, downloadBlob, timestamp, debounce, log } from './util.js';
+import { initOperator, openOperator, closeOperator, isOperatorOpen, refreshCameras, renderSessions } from './operator.js';
+import { saveSession } from './store.js';
+import { makeSamplePhotos, addEdgeGuides } from './testprint.js';
+import { $, makeCanvas, makeToken, wait, Cancelled, canvasToBlob, downloadBlob, timestamp, debounce, log } from './util.js';
 
 const el = {
   app: $('#app'),
   loadingText: $('#loading-text'),
+  loadingActions: $('#loading-actions'),
   booth: $('#booth'),
   viewfinder: $('#viewfinder'),
   video: $('#video'),
@@ -32,10 +36,11 @@ const el = {
   downloadBtn: $('#download-btn'),
   restartBtn: $('#restart-btn'),
   reviewHint: $('#review-hint'),
+  idleHint: $('#idle-hint'),
   msgTitle: $('#msg-title'),
   msgText: $('#msg-text'),
   msgRetry: $('#msg-retry'),
-  msgReload: $('#msg-reload'),
+  msgSettings: $('#msg-settings'),
   flash: $('#flash'),
 };
 
@@ -54,6 +59,8 @@ const state = {
   stallRestarts: [],
   prep: null, // Promise<{ strip, sheet, sheetBlob }> for the current photos
   printing: false,
+  pendingSwitch: false, // switch back to the chosen camera when the booth is idle
+  lastActivity: Date.now(),
 };
 
 const camera = new Camera(el.video);
@@ -76,9 +83,15 @@ const pct = (v, total) => `${((v / total) * 100).toFixed(4)}%`;
 
 /* ---------------- screens ---------------- */
 
+let loadingTimer = null;
+
 function showScreen(name) {
   state.screen = name;
   el.app.dataset.screen = name;
+  // Never a dead end: if loading takes long, offer Retry and Settings.
+  clearTimeout(loadingTimer);
+  el.loadingActions.hidden = true;
+  if (name === 'loading') loadingTimer = setTimeout(() => (el.loadingActions.hidden = false), 8000);
   if (name === 'booth') {
     camera.resetWatchdog();
     const p = el.video.play();
@@ -287,6 +300,10 @@ function goIdle() {
   markMini(-1);
   el.progress.textContent = '';
   renderMini();
+  if (state.pendingSwitch && !isOperatorOpen()) {
+    state.pendingSwitch = false;
+    connectCamera();
+  }
 }
 
 /* ---------------- review ---------------- */
@@ -298,6 +315,8 @@ function showReview() {
   setPhase('idle');
   refreshResult();
   hint('');
+  state.lastActivity = Date.now();
+  el.idleHint.textContent = '';
   updatePrintButton();
 }
 
@@ -375,6 +394,7 @@ async function printNow() {
     const prep = await (state.prep || prepareSheet());
     addSheets(1);
     log.info(`print: sheet ${sheetsSent()}`);
+    storeSheet(prep); // in the background; never delays printing
     await printBlob(prep.sheetBlob);
     showPrinting();
   } catch (e) {
@@ -385,6 +405,42 @@ async function printNow() {
     state.printing = false;
     updatePrintButton();
   }
+}
+
+async function storeSheet(prep) {
+  try {
+    const t = makeCanvas(160, 240);
+    const tx = t.getContext('2d');
+    tx.imageSmoothingQuality = 'high';
+    tx.drawImage(prep.sheet, 0, 0, t.width, t.height);
+    const thumbBlob = await canvasToBlob(t, 'image/jpeg', 0.82);
+    await saveSession({ sheetBlob: prep.sheetBlob, thumbBlob, layout: settings.layout });
+    if (isOperatorOpen()) renderSessions();
+  } catch (e) {
+    log.warn('could not save the sheet for reprinting', e);
+  }
+}
+
+// Operator prints skip the guest print lock but restart it.
+async function operatorPrint(blob) {
+  startLock();
+  addSheets(1);
+  await printBlob(blob);
+  updatePrintButton();
+}
+
+async function testPrint() {
+  const photos = makeSamplePhotos(state.frame);
+  const strip = composeStrip(state.frame, photos);
+  const sheet = addEdgeGuides(composeSheet(strip, { layout: settings.layout, inset: settings.printInset }));
+  const blob = await canvasToBlob(sheet);
+  log.info('test print');
+  await operatorPrint(blob);
+}
+
+async function reprint(session) {
+  log.info(`reprint of sheet #${session.id}`);
+  await operatorPrint(session.sheetBlob);
 }
 
 let printingTimer = null;
@@ -429,6 +485,8 @@ async function connectCamera({ strict = false, quiet = false, deviceId, label } 
     if (info.autoPicked && info.deviceId) {
       setSetting('cameraId', info.deviceId);
       setSetting('cameraLabel', info.label);
+    } else if (settings.cameraLabel && info.label === settings.cameraLabel && info.deviceId && info.deviceId !== settings.cameraId) {
+      setSetting('cameraId', info.deviceId); // same camera, new id (ids can change between visits)
     }
     log.info(`camera on: ${info.label || 'default camera'} ${info.width}x${info.height}`);
     state.cameraError = null;
@@ -470,7 +528,7 @@ const AUTO_RETRY = ['lost', 'notfound', 'busy', 'timeout', 'frozen', 'capture', 
 
 // While a camera message is showing, keep trying quietly. After an unplug we
 // only reconnect the same camera; Reconnect (manual) may use any camera.
-function scheduleAutoRetry() {
+function scheduleAutoRetry(delay = 3000) {
   clearTimeout(retryTimer);
   if (!AUTO_RETRY.includes(state.cameraError)) return;
   retryTimer = setTimeout(async () => {
@@ -485,7 +543,32 @@ function scheduleAutoRetry() {
     const strict = state.cameraError !== 'notfound' && !!(deviceId || label);
     const ok = await connectCamera({ strict, quiet: true, deviceId, label });
     if (!ok && state.screen === 'message') scheduleAutoRetry();
-  }, 3000);
+  }, delay);
+}
+
+// Faster recovery than polling: react when cameras are plugged in or out.
+async function onDeviceChange() {
+  const cams = await camera.listCameras();
+  log.info(`devices changed: ${cams.length} camera(s)`);
+  if (isOperatorOpen()) refreshCameras(cams);
+  if (camera.track && camera.track.readyState === 'ended') {
+    camera.markLost('ended');
+    return;
+  }
+  if (camera.running) {
+    const chosen = settings.cameraId;
+    if (chosen && camera.deviceId !== chosen && cams.some((c) => c.deviceId === chosen)) {
+      log.info('chosen camera is back');
+      if (state.screen === 'booth' && state.phase === 'idle' && !isOperatorOpen()) connectCamera();
+      else state.pendingSwitch = true;
+    }
+    return;
+  }
+  if (state.screen === 'message' && AUTO_RETRY.includes(state.cameraError)) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+    scheduleAutoRetry(300);
+  }
 }
 
 function onCameraLost(e) {
@@ -523,6 +606,43 @@ function watchdog() {
   connectCamera({ deviceId: camera.deviceId, label: camera.label });
 }
 
+// Review screen: start over after a while with no activity (guests walked away).
+function idleCheck() {
+  if (state.screen !== 'review' || isOperatorOpen() || state.printing) {
+    if (el.idleHint.textContent) el.idleHint.textContent = '';
+    return;
+  }
+  const left = settings.idleReset * 1000 - (Date.now() - state.lastActivity);
+  if (left <= 0) {
+    log.info('idle: back to start');
+    el.idleHint.textContent = '';
+    goIdle();
+    return;
+  }
+  el.idleHint.textContent = left <= 10000 ? `Starting over in ${Math.ceil(left / 1000)}…` : '';
+}
+
+function onOperatorOpen() {
+  // The operator always wins: stop any capture in progress.
+  if (state.seq) {
+    if (state.seqMode === 'retake') state.returnTo = 'review';
+    cancelSequence();
+  }
+}
+
+function onOperatorClose() {
+  state.lastActivity = Date.now();
+  if (state.screen === 'booth' && state.phase === 'idle' && state.pendingSwitch) goIdle();
+}
+
+function frameInfo() {
+  const f = state.frame;
+  if (!f) return '';
+  const holes = f.holeSource === 'detected' ? 'holes detected' : 'holes from config.js';
+  const src = f.source === 'file' ? 'frame.png' : 'PLAIN FRAME (frame.png missing)';
+  return `${src} ${f.width}×${f.height} · ${holes}${f.warnings.length ? ' · ' + f.warnings.join('; ') : ''}`;
+}
+
 /* ---------------- input ---------------- */
 
 function bindUI() {
@@ -533,10 +653,20 @@ function bindUI() {
   el.downloadBtn.addEventListener('click', downloadFiles);
   el.restartBtn.addEventListener('click', goIdle);
   el.msgRetry.addEventListener('click', () => connectCamera({ strict: false }));
-  el.msgReload.addEventListener('click', () => location.reload());
+  el.msgSettings.addEventListener('click', openOperator);
+  $('#loading-retry').addEventListener('click', () => connectCamera());
+  $('#loading-settings').addEventListener('click', openOperator);
 
   document.addEventListener('keydown', (e) => {
+    if (isOperatorOpen()) {
+      if (e.key === 'Escape') closeOperator();
+      return;
+    }
     if (e.target && e.target.closest && e.target.closest('input, select, textarea')) return;
+    if ((e.key === 'o' || e.key === 'O') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      openOperator();
+      return;
+    }
     if ((e.key === ' ' || e.key === 'Enter') && state.screen === 'booth') {
       e.preventDefault();
       if (!e.repeat) startSession();
@@ -551,6 +681,14 @@ function bindUI() {
   document.addEventListener('dragstart', (e) => e.preventDefault());
 
   camera.addEventListener('lost', onCameraLost);
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', debounce(onDeviceChange, 700));
+  }
+  watchPermission();
+  for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
+    document.addEventListener(ev, () => (state.lastActivity = Date.now()), { capture: true, passive: true });
+  }
+  setInterval(idleCheck, 250);
   setInterval(watchdog, 1000);
   setInterval(() => {
     if (state.screen === 'review') updatePrintButton();
@@ -567,6 +705,19 @@ function bindUI() {
 
   window.addEventListener('error', (e) => log.error('error:', e.message));
   window.addEventListener('unhandledrejection', (e) => log.error('unhandled:', e.reason));
+}
+
+// If camera access is granted later (from Chrome's site settings), start right away.
+async function watchPermission() {
+  try {
+    const st = await navigator.permissions.query({ name: 'camera' });
+    st.addEventListener('change', () => {
+      log.info('camera permission:', st.state);
+      if (st.state === 'granted' && state.screen === 'message') connectCamera();
+    });
+  } catch {
+    /* not supported */
+  }
 }
 
 function applySettings(key) {
@@ -591,6 +742,16 @@ async function keepAwake() {
 
 async function boot() {
   initPrint();
+  initOperator({
+    camera,
+    connectCamera,
+    getState: () => state,
+    onOpen: onOperatorOpen,
+    onClose: onOperatorClose,
+    testPrint,
+    reprint,
+    info: frameInfo,
+  });
   bindUI();
   applySettings();
   onSettingsChange(applySettings);
@@ -610,7 +771,7 @@ window.PB = {
   settings,
   setSetting,
   log,
-  actions: { startSession, goIdle, showReview, retake, setRetakeMode, downloadFiles, connectCamera, printNow, prepareSheet, setPrintImage },
+  actions: { startSession, goIdle, showReview, retake, setRetakeMode, downloadFiles, connectCamera, printNow, prepareSheet, setPrintImage, testPrint, openOperator, closeOperator },
   print: { lockRemainingMs, sheetsSent },
   compose: { composeStrip, composeSheet, cropFromVideo },
 };

@@ -530,6 +530,285 @@ test('print: printing screen returns to the start screen by itself', async () =>
   await ctx.close();
 });
 
+function stubPrint() {
+  window.__printCalls = 0;
+  window.print = () => {
+    window.__printCalls++;
+  };
+}
+
+// A synthetic camera that the test can "unplug" and "plug back in".
+function controllableCamera() {
+  window.__camPlugged = true;
+  window.__camTracks = [];
+  const make = () => {
+    const c = document.createElement('canvas');
+    c.width = 1280;
+    c.height = 720;
+    const x = c.getContext('2d');
+    let n = 0;
+    setInterval(() => {
+      x.fillStyle = n++ % 2 ? '#334455' : '#334456';
+      x.fillRect(0, 0, 1280, 720);
+    }, 33);
+    return c.captureStream(30);
+  };
+  navigator.mediaDevices.getUserMedia = async () => {
+    if (!window.__camPlugged) throw new DOMException('Requested device not found', 'NotFoundError');
+    const s = make();
+    window.__camTracks.push(s.getVideoTracks()[0]);
+    return s;
+  };
+  window.__unplug = () => {
+    window.__camPlugged = false;
+    for (const t of window.__camTracks) {
+      t.stop();
+      t.dispatchEvent(new Event('ended'));
+    }
+    navigator.mediaDevices.dispatchEvent(new Event('devicechange'));
+  };
+  window.__plug = () => {
+    window.__camPlugged = true;
+    navigator.mediaDevices.dispatchEvent(new Event('devicechange'));
+  };
+}
+
+function renameSecondCamera() {
+  const orig = navigator.mediaDevices.enumerateDevices.bind(navigator.mediaDevices);
+  navigator.mediaDevices.enumerateDevices = async () =>
+    (await orig()).map((d) =>
+      d.kind === 'videoinput' && d.label === 'fake_device_1'
+        ? { deviceId: d.deviceId, groupId: d.groupId, kind: d.kind, label: 'DJI Osmo Pocket 3', toJSON() { return this; } }
+        : d
+    );
+}
+
+const storeCount = () =>
+  import('./js/store.js').then(async ({ listSessions }) => (await listSessions()).length);
+
+test('operator: opens with "o" or a 2 s corner hold; settings persist', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx);
+  await page.mouse.move(30, 30);
+  await page.mouse.down();
+  await page.waitForTimeout(600);
+  await page.mouse.up();
+  assert.ok(await page.isHidden('#operator'), 'a short tap does not open the menu');
+  await page.mouse.down();
+  await page.waitForTimeout(2300);
+  await page.mouse.up();
+  await page.waitForSelector('#operator:not([hidden])', { timeout: 2000 });
+  await page.waitForTimeout(300);
+  await shot(page, '09-operator');
+  await page.keyboard.press('Escape');
+  assert.ok(await page.isHidden('#operator'));
+  await page.keyboard.press('o');
+  await page.waitForSelector('#operator:not([hidden])');
+  await page.click('label.op-row:has(input[data-setting="sound"])');
+  await page.click('.stepper[data-setting="countdown"] button[aria-label^="Increase"]');
+  await page.click('.seg[data-setting="layout"] button[data-value="single"]');
+  await page.click('label.op-row:has(input[data-setting="mirrorPreview"])');
+  assert.equal(await page.evaluate(() => document.querySelector('#video').classList.contains('mirror')), false, 'mirror toggles live');
+  await page.reload();
+  await waitForScreen(page, 'booth');
+  const s = await page.evaluate(() => ({ ...PB.settings }));
+  assert.equal(s.sound, true);
+  assert.equal(s.countdown, 2);
+  assert.equal(s.layout, 'single');
+  assert.equal(s.mirrorPreview, false);
+  await ctx.close();
+});
+
+test('camera picker: lists cameras, prefers DJI/Pocket first time, remembers the choice', async () => {
+  const b2 = await chromium.launch({
+    args: ['--use-fake-device-for-media-stream=device-count=2', '--use-fake-ui-for-media-stream'],
+  });
+  try {
+    const ctx = await b2.newContext({ viewport: { width: 1366, height: 768 }, serviceWorkers: 'block' });
+    const page = await openApp(ctx, { init: [renameSecondCamera] });
+    const first = await page.evaluate(() => ({ track: PB.camera.label, saved: PB.settings.cameraId, active: PB.camera.deviceId }));
+    assert.equal(first.track, 'DJI Osmo Pocket 3', 'the DJI-labelled camera was picked automatically');
+    assert.equal(first.saved, first.active, 'and remembered');
+    // Reload: device ids change here, and the DJI camera is not the default one,
+    // so it can only be found again by name.
+    await page.reload();
+    await waitForScreen(page, 'booth');
+    const again = await page.evaluate(() => ({ track: PB.camera.label, saved: PB.settings.cameraId, active: PB.camera.deviceId }));
+    assert.equal(again.track, 'DJI Osmo Pocket 3', 'DJI camera found again after reload');
+    assert.equal(again.saved, again.active, 'saved id refreshed');
+    await page.keyboard.press('o');
+    await page.waitForFunction(() => document.querySelectorAll('#op-camera option').length >= 3);
+    const options = await page.$$eval('#op-camera option', (os) => os.map((o) => ({ v: o.value, t: o.textContent })));
+    assert.ok(options.some((o) => o.t === 'DJI Osmo Pocket 3'), 'DJI camera listed');
+    const other = options.find((o) => o.t === 'fake_device_0');
+    assert.ok(other, 'built-in camera listed');
+    await page.selectOption('#op-camera', other.v);
+    await page.waitForFunction((id) => PB.camera.deviceId === id && PB.camera.ready, other.v, { timeout: 10000 });
+    assert.equal(await page.evaluate(() => PB.settings.cameraId), other.v);
+    // Chrome may hand out new device ids after a reload (it does here, because the
+    // test permission is not stored). The camera must still be found by its name.
+    await page.reload();
+    await waitForScreen(page, 'booth');
+    const after = await page.evaluate(() => ({ label: PB.camera.label, id: PB.camera.deviceId, saved: PB.settings.cameraId }));
+    assert.equal(after.label, 'fake_device_0', 'chosen camera used again after reload');
+    assert.equal(after.saved, after.id, 'saved id refreshed to the current one');
+    await ctx.close();
+  } finally {
+    await b2.close();
+  }
+});
+
+test('saved sheets: printing stores the sheet, reprint, keep last 20, clear all', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, { settings: { ...FAST, printLock: 0 }, init: [stubPrint] });
+  await runSession(page);
+  await page.click('#print-btn');
+  await waitForScreen(page, 'printing', 5000);
+  await page.waitForFunction(storeCount, null, { timeout: 5000 });
+  assert.equal(await page.evaluate(storeCount), 1);
+  await page.click('#printing');
+  await waitForScreen(page, 'booth');
+  await page.keyboard.press('o');
+  await page.waitForSelector('.op-session');
+  await page.click('.op-session');
+  assert.equal(await page.evaluate(() => window.__printCalls), 1, 'first tap only arms the reprint');
+  await page.click('.op-session');
+  await page.waitForFunction(() => window.__printCalls === 2);
+  assert.equal(await page.evaluate(() => PB.print.sheetsSent()), 2, 'reprint counts a sheet');
+  await shot(page, '12-operator-saved');
+  const n = await page.evaluate(async () => {
+    const { saveSession, listSessions } = await import('./js/store.js');
+    const blob = new Blob(['x'], { type: 'image/png' });
+    for (let i = 0; i < 22; i++) await saveSession({ sheetBlob: blob, thumbBlob: blob, layout: 'double' });
+    return (await listSessions()).length;
+  });
+  assert.equal(n, 20, 'only the last 20 are kept');
+  await page.click('#op-clear');
+  assert.equal(await page.evaluate(storeCount), 20, 'first tap only arms Clear all');
+  await page.click('#op-clear');
+  await page.waitForFunction(async () => (await import('./js/store.js').then((m) => m.listSessions())).length === 0);
+  await ctx.close();
+});
+
+test('test print: prints a 4x6 sheet with sample photos and edge guides', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, { init: [stubPrint] });
+  await page.keyboard.press('o');
+  await page.click('#op-test-print');
+  await page.waitForFunction(() => window.__printCalls === 1, null, { timeout: 5000 });
+  const size = await page.evaluate(() => [document.querySelector('#print-img').naturalWidth, document.querySelector('#print-img').naturalHeight]);
+  assert.deepEqual(size, [1200, 1800]);
+  const file = path.join(OUT, 'test-print.pdf');
+  await page.pdf({ path: file, preferCSSPageSize: true, printBackground: true });
+  const info = pdfInfo(file);
+  assert.equal(info.pages, 1);
+  execFileSync('pdftoppm', ['-r', '100', '-png', '-singlefile', file, path.join(OUT, 'test-print')]);
+  await ctx.close();
+});
+
+test('idle: review returns to the start screen, with a warning first', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx);
+  await runSession(page);
+  await page.evaluate(() => {
+    PB.state.lastActivity = Date.now() - (PB.settings.idleReset - 4) * 1000;
+  });
+  await page.waitForFunction(() => /Starting over in/.test(document.querySelector('#idle-hint').textContent), null, { timeout: 3000 });
+  await shot(page, '10-idle-warning');
+  await waitForScreen(page, 'booth', 8000);
+  await ctx.close();
+});
+
+test('errors: camera unplugged shows a message and reconnects when plugged back in', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, { init: [controllableCamera] });
+  await page.evaluate(() => window.__unplug());
+  await waitForScreen(page, 'message', 5000);
+  assert.equal(await page.textContent('#msg-title'), 'Camera disconnected');
+  assert.ok(await page.isVisible('#msg-retry'));
+  assert.ok(await page.isVisible('#msg-settings'));
+  await shot(page, '11-unplugged');
+  await page.waitForTimeout(3600);
+  assert.equal(await page.evaluate(() => PB.state.screen), 'message', 'stays on the message while unplugged');
+  await page.evaluate(() => window.__plug());
+  await waitForScreen(page, 'booth', 8000);
+  await page.click('#start-btn');
+  await page.waitForFunction(() => PB.state.phase === 'countdown');
+  await ctx.close();
+});
+
+test('errors: unplug mid-countdown cancels; unplug on review waits for the guests', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, { settings: { ...FAST, countdown: 3 }, init: [controllableCamera] });
+  await page.keyboard.press('Space');
+  await page.waitForFunction(() => PB.state.phase === 'countdown');
+  await page.evaluate(() => window.__unplug());
+  await waitForScreen(page, 'message', 5000);
+  await page.evaluate(() => window.__plug());
+  await waitForScreen(page, 'booth', 8000);
+  assert.equal(await page.evaluate(() => PB.state.phase), 'idle');
+  await page.evaluate(() => PB.setSetting('countdown', 1));
+  await runSession(page);
+  await page.evaluate(() => window.__unplug());
+  await page.waitForTimeout(1500);
+  assert.equal(await page.evaluate(() => PB.state.screen), 'review', 'guests keep their review screen');
+  await page.click('#restart-btn');
+  await waitForScreen(page, 'message', 3000);
+  assert.equal(await page.textContent('#msg-title'), 'Camera disconnected');
+  await ctx.close();
+});
+
+test('errors: no camera at all shows "No camera found"', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, {
+    waitFor: 'message',
+    init: [
+      () => {
+        navigator.mediaDevices.getUserMedia = async () => {
+          throw new DOMException('Requested device not found', 'NotFoundError');
+        };
+      },
+    ],
+  });
+  assert.equal(await page.textContent('#msg-title'), 'No camera found');
+  await ctx.close();
+});
+
+test('errors: a camera that never answers shows "not responding"', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, {
+    waitFor: 'loading',
+    init: [
+      () => {
+        navigator.permissions.query = async () => ({ state: 'granted', addEventListener() {} });
+        navigator.mediaDevices.getUserMedia = () => new Promise(() => {});
+      },
+    ],
+  });
+  await page.waitForSelector('#loading-actions:not([hidden])', { timeout: 10000 });
+  await waitForScreen(page, 'message', 15000);
+  assert.equal(await page.textContent('#msg-title'), 'Camera not responding');
+  await ctx.close();
+});
+
+test('errors: denied camera has Retry and a way into the operator menu', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, {
+    waitFor: 'message',
+    init: [
+      () => {
+        navigator.mediaDevices.getUserMedia = async () => {
+          throw new DOMException('Permission denied', 'NotAllowedError');
+        };
+      },
+    ],
+  });
+  assert.equal(await page.textContent('#msg-retry'), 'Retry');
+  await page.click('#msg-settings');
+  await page.waitForSelector('#operator:not([hidden])');
+  await ctx.close();
+});
+
 /* ---------------- runner ---------------- */
 
 (async () => {

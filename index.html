@@ -15,11 +15,16 @@
 <body>
   <main id="app" data-screen="loading">
     <div class="brand" aria-hidden="true">STKEYCLUB</div>
+    <div id="corner" aria-hidden="true"></div>
 
     <section id="loading" class="screen" aria-live="polite">
       <div class="center-box">
         <div class="spinner" aria-hidden="true"></div>
         <p id="loading-text">Starting camera…</p>
+        <div id="loading-actions" class="actions loading-actions" hidden>
+          <button id="loading-retry" class="btn" type="button">Retry</button>
+          <button id="loading-settings" class="btn" type="button">Settings</button>
+        </div>
       </div>
     </section>
 
@@ -65,6 +70,7 @@
           <span>Start over</span>
         </button>
         <p id="review-hint" class="hint" aria-live="polite"></p>
+        <p id="idle-hint" class="hint idle-hint" aria-live="polite"></p>
       </div>
     </section>
 
@@ -84,12 +90,84 @@
         <p id="msg-text"></p>
         <div class="actions">
           <button id="msg-retry" class="btn btn-primary" type="button">Reconnect</button>
-          <button id="msg-reload" class="btn" type="button">Reload</button>
+          <button id="msg-settings" class="btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9"/><path d="M17 6h3"/><circle cx="15" cy="6" r="2"/><path d="M4 12h3"/><path d="M11 12h9"/><circle cx="9" cy="12" r="2"/><path d="M4 18h11"/><path d="M19 18h1"/><circle cx="17" cy="18" r="2"/></svg>
+            <span>Settings</span>
+          </button>
         </div>
       </div>
     </section>
 
     <div id="flash" aria-hidden="true"></div>
+
+    <div id="operator" class="operator" hidden>
+      <div class="op-backdrop"></div>
+      <aside class="op-panel" role="dialog" aria-modal="true" aria-labelledby="op-title" tabindex="-1">
+        <header class="op-head">
+          <h2 id="op-title">Operator</h2>
+          <button id="op-close" class="btn btn-small" type="button">Done</button>
+        </header>
+        <div class="op-body">
+          <section class="op-section">
+            <h3>Camera</h3>
+            <div class="op-camera">
+              <select id="op-camera" aria-label="Camera"></select>
+              <button id="op-camera-refresh" class="btn btn-small btn-icon" type="button" aria-label="Refresh camera list">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></svg>
+              </button>
+            </div>
+            <p id="op-camera-status" class="op-note"></p>
+            <label class="op-row"><span>Mirror preview</span><input type="checkbox" class="switch" data-setting="mirrorPreview"></label>
+            <label class="op-row"><span>Mirror saved photo</span><input type="checkbox" class="switch" data-setting="mirrorPhoto"></label>
+          </section>
+
+          <section class="op-section">
+            <h3>Capture</h3>
+            <div class="op-row"><span>Countdown</span><div class="stepper" data-setting="countdown" data-unit=" s"></div></div>
+            <div class="op-row"><span>Pause between shots</span><div class="stepper" data-setting="pause" data-unit=" s"></div></div>
+            <label class="op-row"><span>Sound</span><input type="checkbox" class="switch" data-setting="sound"></label>
+            <label class="op-row"><span>Flash</span><input type="checkbox" class="switch" data-setting="flash"></label>
+            <label class="op-row"><span>Filters</span><input type="checkbox" class="switch" data-setting="filters"></label>
+          </section>
+
+          <section class="op-section">
+            <h3>Print</h3>
+            <div class="op-row"><span>Layout</span><div class="seg" data-setting="layout"><button type="button" data-value="double">2 per sheet</button><button type="button" data-value="single">1 + blank</button></div></div>
+            <div class="op-row"><span>Page size</span><div class="seg" data-setting="pageSize"><button type="button" data-value="4x6in">4×6 in</button><button type="button" data-value="100x148mm">100×148 mm</button></div></div>
+            <div class="op-row"><span>Safety margin</span><div class="stepper" data-setting="printInset" data-unit=" %"></div></div>
+            <div class="op-row"><span>Print lock</span><div class="stepper" data-setting="printLock" data-unit=" s"></div></div>
+            <div class="op-row">
+              <span>Sheets sent</span>
+              <div class="op-inline">
+                <strong id="op-sheets" class="op-count">0</strong>
+                <button id="op-sheets-minus" class="btn btn-small" type="button" aria-label="Subtract one sheet">−1</button>
+                <button id="op-sheets-reset" class="btn btn-small" type="button">Reset</button>
+              </div>
+            </div>
+            <p id="op-sheets-note" class="op-note"></p>
+            <button id="op-test-print" class="btn btn-small btn-wide" type="button">Test print</button>
+          </section>
+
+          <section class="op-section">
+            <h3>Saved sheets</h3>
+            <div id="op-sessions" class="op-sessions"></div>
+            <button id="op-clear" class="btn btn-small btn-wide btn-danger" type="button">Clear all</button>
+          </section>
+
+          <section class="op-section">
+            <h3>Booth</h3>
+            <div class="op-row"><span>Idle reset</span><div class="stepper" data-setting="idleReset" data-unit=" s"></div></div>
+            <div class="op-buttons">
+              <button id="op-fullscreen" class="btn btn-small" type="button">Full screen</button>
+              <button id="op-reload" class="btn btn-small" type="button">Reload</button>
+            </div>
+            <p id="op-info" class="op-note"></p>
+            <details class="op-log"><summary>Log</summary><pre id="op-log"></pre></details>
+          </section>
+        </div>
+        <div id="op-toast" class="op-toast" role="status"></div>
+      </aside>
+    </div>
   </main>
 
   <div id="boot-fail" hidden>

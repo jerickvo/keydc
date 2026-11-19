@@ -165,24 +165,32 @@ export class Camera extends EventTarget {
     if (!stream) throw new CameraError(lastErr ? classifyError(lastErr) : 'notfound', lastErr);
     if (usedId === null) autoPicked = false;
 
-    // First run: labels are hidden until permission is granted, so look for a
-    // DJI/Pocket camera again now that we can see the names.
-    if (nothingSaved && !strict && usedId === null) {
+    // We ended up on the default camera. Camera names are hidden until
+    // permission is granted, and device ids can change between visits, so now
+    // that the names are visible look again for the saved camera by name, or
+    // (first run) for a DJI/Pocket camera.
+    if (!strict && usedId === null) {
       const activeId = this._trackDeviceId(stream);
-      const pref = (await this.listCameras()).find((c) => matchesPreferred(c.label));
-      if (pref && pref.deviceId !== activeId) {
+      const cams2 = await this.listCameras();
+      let target = label ? cams2.find((c) => c.label === label) : null;
+      let byPreference = false;
+      if (!target && nothingSaved) {
+        target = cams2.find((c) => matchesPreferred(c.label));
+        byPreference = !!target;
+      }
+      if (target && target.deviceId !== activeId) {
         stopStream(stream);
         stream = null;
         try {
-          stream = await this._open(pref.deviceId, CONFIG.camera.startTimeoutMs);
-          autoPicked = true;
+          stream = await this._open(target.deviceId, CONFIG.camera.startTimeoutMs);
+          autoPicked = byPreference;
         } catch {
           stream = await this._open(null, CONFIG.camera.startTimeoutMs).catch((e) => {
             throw new CameraError(classifyError(e), e);
           });
         }
-      } else if (pref) {
-        autoPicked = true;
+      } else if (target) {
+        autoPicked = byPreference;
       }
       if (gen !== this.gen) {
         stopStream(stream);
@@ -241,7 +249,13 @@ export class Camera extends EventTarget {
     this.track = track;
     track.addEventListener('ended', this._onEnded);
     this.deviceId = this._trackDeviceId(stream);
-    this.label = track.label || '';
+    // Use the name from the device list (the same list used to find it again later).
+    const listed = this.deviceId ? (await this.listCameras()).find((c) => c.deviceId === this.deviceId) : null;
+    this.label = (listed && listed.label) || track.label || '';
+    if (gen !== this.gen) {
+      stopStream(stream);
+      throw new CameraError('superseded');
+    }
     v.muted = true;
     v.playsInline = true;
     v.srcObject = stream;
