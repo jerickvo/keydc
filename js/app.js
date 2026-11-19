@@ -9,6 +9,7 @@ import { initPrint, applyPageSize, printBlob, setPrintImage, lockRemainingMs, st
 import { initOperator, openOperator, closeOperator, isOperatorOpen, refreshCameras, renderSessions } from './operator.js';
 import { saveSession } from './store.js';
 import { makeSamplePhotos, addEdgeGuides } from './testprint.js';
+import { FILTERS, filteredDrawer, filterOptions, canvasFilterSupported } from './filters.js';
 import { $, makeCanvas, makeToken, wait, Cancelled, canvasToBlob, downloadBlob, timestamp, debounce, log } from './util.js';
 
 const el = {
@@ -31,6 +32,9 @@ const el = {
   printBtn: $('#print-btn'),
   printLabel: $('#print-btn .label'),
   printing: $('#printing'),
+  filtersBtn: $('#filters-btn'),
+  filtersDone: $('#filters-done'),
+  filterList: $('#filter-list'),
   retakeBtn: $('#retake-btn'),
   retakeLabel: $('#retake-btn .label'),
   downloadBtn: $('#download-btn'),
@@ -49,6 +53,7 @@ const state = {
   phase: 'idle', // booth phase: idle | countdown | shot
   frame: null,
   photos: [], // full-resolution crops (canvases), one per hole
+  filter: 'none',
   seq: null, // cancel token of the running capture sequence
   seqMode: null, // 'session' | 'retake'
   retakeMode: false,
@@ -155,7 +160,7 @@ function renderMini() {
   if (!f) return;
   const cssH = Math.max(240, window.innerHeight * 0.66);
   const k = Math.min(1, (cssH * Math.min(2, window.devicePixelRatio || 1)) / f.height);
-  composeStrip(f, state.photos, { scale: k, canvas: el.mini });
+  composeStrip(f, state.photos, { scale: k, canvas: el.mini, drawPhoto: filteredDrawer(state.filter) });
 }
 
 function markMini(i) {
@@ -234,6 +239,7 @@ async function startSession() {
   }
   sound.unlockAudio();
   state.photos = new Array(CONFIG.shots).fill(null);
+  state.filter = 'none';
   renderMini();
   const ok = await runShots(state.photos.map((_, i) => i), 'session');
   if (ok) showReview();
@@ -290,7 +296,9 @@ async function runShots(indices, mode) {
 function goIdle() {
   cancelSequence();
   state.photos = [];
+  state.filter = 'none';
   setRetakeMode(false);
+  setFiltersOpen(false);
   if (!camera.running) {
     showCameraError(state.cameraError || 'lost');
     return;
@@ -314,6 +322,7 @@ function goIdle() {
 function showReview() {
   hideShot();
   setRetakeMode(false);
+  setFiltersOpen(false);
   showScreen('review');
   setPhase('idle');
   refreshResult();
@@ -326,13 +335,13 @@ function showReview() {
 // Re-render the strip and get the print sheet ready in the background, so
 // Print opens the dialog right away.
 function refreshResult() {
-  composeStrip(state.frame, state.photos, { canvas: el.strip });
+  composeStrip(state.frame, state.photos, { canvas: el.strip, drawPhoto: filteredDrawer(state.filter) });
   state.prep = prepareSheet();
   state.prep.catch((e) => log.error('could not prepare the sheet', e));
 }
 
 async function prepareSheet() {
-  const strip = composeStrip(state.frame, state.photos);
+  const strip = composeStrip(state.frame, state.photos, { drawPhoto: filteredDrawer(state.filter) });
   const sheet = composeSheet(strip, { layout: settings.layout, inset: settings.printInset });
   const sheetBlob = await canvasToBlob(sheet);
   return { strip, sheet, sheetBlob };
@@ -350,6 +359,45 @@ function setRetakeMode(on) {
   el.review.classList.toggle('retake-mode', state.retakeMode);
   el.retakeLabel.textContent = state.retakeMode ? 'Cancel' : 'Retake';
   if (state.screen === 'review') hint(state.retakeMode ? 'Tap a photo to retake it' : '');
+}
+
+/* ---------------- filters ---------------- */
+
+function setFiltersOpen(open) {
+  const on = !!open && settings.filters && state.screen === 'review';
+  el.review.classList.toggle('filters-open', on);
+  if (on) {
+    setRetakeMode(false);
+    renderFilterList();
+  }
+}
+
+// Small strips showing what each filter looks like on these photos.
+function renderFilterList() {
+  el.filterList.textContent = '';
+  const thumbH = Math.max(140, Math.min(250, window.innerHeight * 0.3));
+  const scale = Math.min(1, (thumbH * Math.min(2, window.devicePixelRatio || 1)) / state.frame.height);
+  for (const f of FILTERS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'filter-item';
+    b.dataset.filter = f.id;
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(f.id === state.filter));
+    const c = composeStrip(state.frame, state.photos, { scale, drawPhoto: filteredDrawer(f.id) });
+    const label = document.createElement('span');
+    label.textContent = f.label;
+    b.append(c, label);
+    b.addEventListener('click', () => chooseFilter(f.id));
+    el.filterList.appendChild(b);
+  }
+}
+
+function chooseFilter(id) {
+  if (state.filter === id) return;
+  state.filter = id;
+  for (const b of el.filterList.children) b.setAttribute('aria-checked', String(b.dataset.filter === id));
+  refreshResult();
 }
 
 async function retake(i) {
@@ -704,6 +752,8 @@ function bindUI() {
   el.printBtn.addEventListener('click', printNow);
   el.printing.addEventListener('click', leavePrinting);
   el.retakeBtn.addEventListener('click', () => setRetakeMode(!state.retakeMode));
+  el.filtersBtn.addEventListener('click', () => setFiltersOpen(true));
+  el.filtersDone.addEventListener('click', () => setFiltersOpen(false));
   el.downloadBtn.addEventListener('click', downloadFiles);
   el.restartBtn.addEventListener('click', goIdle);
   el.msgRetry.addEventListener('click', () => connectCamera({ strict: false }));
@@ -727,6 +777,7 @@ function bindUI() {
       return;
     }
     if (e.key === 'Escape' && state.retakeMode) setRetakeMode(false);
+    if (e.key === 'Escape') setFiltersOpen(false);
   });
 
   document.addEventListener('contextmenu', (e) => {
@@ -776,6 +827,14 @@ async function watchPermission() {
 
 function applySettings(key) {
   el.video.classList.toggle('mirror', settings.mirrorPreview);
+  el.review.classList.toggle('no-filters', !settings.filters);
+  if (!settings.filters) {
+    setFiltersOpen(false);
+    if (state.filter !== 'none') {
+      state.filter = 'none';
+      if (state.screen === 'review') refreshResult();
+    }
+  }
   applyPageSize();
   if ((key === 'layout' || key === 'printInset') && state.screen === 'review') refreshResult();
 }
@@ -828,6 +887,7 @@ window.PB = {
   log,
   actions: { startSession, goIdle, showReview, retake, setRetakeMode, downloadFiles, connectCamera, printNow, prepareSheet, setPrintImage, testPrint, openOperator, closeOperator },
   print: { lockRemainingMs, sheetsSent },
+  filters: { FILTERS, filterOptions, canvasFilterSupported, chooseFilter },
   compose: { composeStrip, composeSheet, cropFromVideo },
 };
 

@@ -414,13 +414,15 @@ button {
   from { opacity: 0; }
 }
 
-.review-actions {
+.review-actions,
+.actions-main,
+.filter-pane {
   display: flex;
   flex-direction: column;
   gap: 2.4vh;
 }
 
-.review-actions .row {
+.review-actions .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2.4vh;
@@ -428,6 +430,66 @@ button {
 
 .review-actions .btn {
   width: 100%;
+}
+
+#download-btn {
+  grid-column: 1 / -1;
+}
+
+#review.no-filters #filters-btn {
+  display: none;
+}
+
+#review.no-filters #download-btn {
+  grid-column: auto;
+}
+
+.filter-pane,
+#review.filters-open .actions-main {
+  display: none;
+}
+
+#review.filters-open .filter-pane {
+  display: flex;
+}
+
+.filter-list {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.filter-item {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: clamp(14px, 2.3vh, 17px);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.filter-item canvas {
+  display: block;
+  height: clamp(140px, 30vh, 250px);
+  aspect-ratio: var(--frame-ar);
+  border-radius: 4px;
+  outline: 3px solid transparent;
+  outline-offset: 3px;
+  transition: outline-color 0.15s;
+}
+
+.filter-item[aria-checked="true"] {
+  color: var(--text);
+}
+
+.filter-item[aria-checked="true"] canvas {
+  outline-color: var(--teal);
 }
 
 .hint {
@@ -961,8 +1023,12 @@ label.op-row {
     height: 78vh;
   }
 
-  .review-actions .row {
+  .review-actions .grid {
     grid-template-columns: 1fr;
+  }
+
+  #download-btn {
+    grid-column: auto;
   }
 }
 

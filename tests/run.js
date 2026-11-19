@@ -900,6 +900,120 @@ test('pwa: Chrome reports the app as installable', async () => {
   await ctx.close();
 });
 
+// Full-spectrum synthetic camera (hue across, brightness down) for filter checks.
+function rainbowCamera() {
+  navigator.mediaDevices.getUserMedia = async () => {
+    const c = document.createElement('canvas');
+    c.width = 1280;
+    c.height = 720;
+    const x = c.getContext('2d');
+    const draw = () => {
+      for (let i = 0; i < 64; i++) {
+        x.fillStyle = `hsl(${(i / 64) * 360}, 90%, 50%)`;
+        x.fillRect((i * 1280) / 64, 0, 1280 / 64 + 1, 720);
+      }
+      const g = x.createLinearGradient(0, 0, 0, 720);
+      g.addColorStop(0, 'rgba(255,255,255,0.6)');
+      g.addColorStop(0.5, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.7)');
+      x.fillStyle = g;
+      x.fillRect(0, 0, 1280, 720);
+    };
+    draw();
+    setInterval(draw, 50);
+    return c.captureStream(20);
+  };
+}
+
+test('filters: each filter changes the strip; None restores the originals exactly', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, { init: [syntheticCamera] });
+  await runSession(page);
+  const sample = () =>
+    page.evaluate(() => {
+      const s = document.querySelector('#strip');
+      const x = s.getContext('2d');
+      const h = PB.state.frame.holes[0];
+      const at = (fx, fy) => Array.from(x.getImageData(Math.round(h.x + h.w * fx), Math.round(h.y + h.h * fy), 1, 1).data.slice(0, 3));
+      return { red: at(0.2, 0.25), blue: at(0.8, 0.25) };
+    });
+  const base = await sample();
+  await page.click('#filters-btn');
+  await page.waitForSelector('.filter-item');
+  assert.equal(await page.$$eval('.filter-item canvas', (cs) => cs.length), 5, 'five filter thumbnails');
+  await page.waitForTimeout(150);
+  await shot(page, '13-filters');
+  const res = {};
+  for (const id of ['bw', 'warm', 'cool', 'vintage']) {
+    await page.click(`.filter-item[data-filter="${id}"]`);
+    res[id] = await sample();
+  }
+  const g = res.bw.red;
+  assert.ok(Math.abs(g[0] - g[1]) < 6 && Math.abs(g[1] - g[2]) < 6, `B&W turns red grey, got ${g}`);
+  assert.ok(res.warm.blue[2] < base.blue[2] - 20, `Warm lowers blue (${res.warm.blue} vs ${base.blue})`);
+  assert.ok(res.cool.red[0] < base.red[0] - 20, `Cool lowers red (${res.cool.red} vs ${base.red})`);
+  assert.ok(res.vintage.red[1] > base.red[1] + 25 && res.vintage.blue[2] < base.blue[2] - 50, `Vintage is sepia-toned (${res.vintage.red} / ${res.vintage.blue})`);
+  await page.click('.filter-item[data-filter="none"]');
+  assert.deepEqual(await sample(), base, 'None gives back the exact original pixels');
+  await page.click('.filter-item[data-filter="bw"]');
+  const sheetPx = await page.evaluate(async () => {
+    const p = await PB.state.prep;
+    const h = PB.state.frame.holes[0];
+    return Array.from(p.sheet.getContext('2d').getImageData(Math.round(h.x + h.w * 0.2), Math.round(h.y + h.h * 0.25), 1, 1).data.slice(0, 3));
+  });
+  assert.ok(Math.abs(sheetPx[0] - sheetPx[1]) < 6 && Math.abs(sheetPx[1] - sheetPx[2]) < 6, `print sheet uses the chosen filter, got ${sheetPx}`);
+  await page.click('#filters-done');
+  assert.ok(await page.isVisible('#print-btn'));
+  await shot(page, '14-review-bw');
+  await ctx.close();
+});
+
+test('filters: per-pixel fallback matches ctx.filter', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, { init: [rainbowCamera] });
+  await runSession(page);
+  const r = await page.evaluate(async () => {
+    const { filteredDrawer } = await import('./js/filters.js');
+    const fo = PB.filters.filterOptions;
+    const out = { native: PB.filters.canvasFilterSupported() };
+    for (const id of ['bw', 'warm', 'cool', 'vintage']) {
+      fo.forceFallback = false;
+      const a = PB.compose.composeStrip(PB.state.frame, PB.state.photos, { scale: 0.5, drawPhoto: filteredDrawer(id) });
+      fo.forceFallback = true;
+      const b = PB.compose.composeStrip(PB.state.frame, PB.state.photos, { scale: 0.5, drawPhoto: filteredDrawer(id) });
+      fo.forceFallback = false;
+      const da = a.getContext('2d').getImageData(0, 0, a.width, a.height).data;
+      const db = b.getContext('2d').getImageData(0, 0, b.width, b.height).data;
+      let sum = 0;
+      let n = 0;
+      for (let i = 0; i < da.length; i += 4) {
+        sum += Math.abs(da[i] - db[i]) + Math.abs(da[i + 1] - db[i + 1]) + Math.abs(da[i + 2] - db[i + 2]);
+        n += 3;
+      }
+      out[id] = +(sum / n).toFixed(2);
+    }
+    return out;
+  });
+  assert.equal(r.native, true, 'Chrome supports ctx.filter');
+  for (const id of ['bw', 'warm', 'cool', 'vintage']) assert.ok(r[id] < 5, `${id}: mean difference ${r[id]} (0-255 scale)`);
+  console.log('      mean |ctx.filter - fallback|:', JSON.stringify(r));
+  await ctx.close();
+});
+
+test('filters: the operator can turn filters off', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx);
+  await runSession(page);
+  assert.ok(await page.isVisible('#filters-btn'));
+  await page.evaluate(() => PB.filters.chooseFilter('bw'));
+  await page.keyboard.press('o');
+  await page.click('label.op-row:has(input[data-setting="filters"])');
+  await page.keyboard.press('Escape');
+  assert.ok(await page.isHidden('#filters-btn'), 'Filters button hidden');
+  assert.equal(await page.evaluate(() => PB.state.filter), 'none', 'filter reset to None');
+  await ctx.close();
+});
+
 /* ---------------- runner ---------------- */
 
 (async () => {

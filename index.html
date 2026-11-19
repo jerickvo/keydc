@@ -57,24 +57,34 @@
         <div id="hole-buttons"></div>
       </div>
       <div class="review-actions">
-        <button id="print-btn" class="btn btn-primary btn-xl" type="button">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6"/><path d="M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v7H7z"/></svg>
-          <span class="label">Print</span>
-        </button>
-        <div class="row">
-          <button id="retake-btn" class="btn" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.64-6.36L3 8"/><path d="M3 3v5h5"/></svg>
-            <span class="label">Retake</span>
+        <div class="actions-main">
+          <button id="print-btn" class="btn btn-primary btn-xl" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6"/><path d="M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v7H7z"/></svg>
+            <span class="label">Print</span>
           </button>
-          <button id="download-btn" class="btn" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
-            <span>Download</span>
+          <div class="grid">
+            <button id="retake-btn" class="btn" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.64-6.36L3 8"/><path d="M3 3v5h5"/></svg>
+              <span class="label">Retake</span>
+            </button>
+            <button id="filters-btn" class="btn" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><circle cx="15" cy="9" r="5.5"/><circle cx="12" cy="15" r="5.5"/></svg>
+              <span>Filters</span>
+            </button>
+            <button id="download-btn" class="btn" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+              <span>Download</span>
+            </button>
+          </div>
+          <button id="restart-btn" class="btn btn-quiet" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            <span>Start over</span>
           </button>
         </div>
-        <button id="restart-btn" class="btn btn-quiet" type="button">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-          <span>Start over</span>
-        </button>
+        <div class="filter-pane">
+          <div id="filter-list" class="filter-list" role="radiogroup" aria-label="Filters"></div>
+          <button id="filters-done" class="btn btn-primary" type="button">Done</button>
+        </div>
         <p id="review-hint" class="hint" aria-live="polite"></p>
         <p id="idle-hint" class="hint idle-hint" aria-live="polite"></p>
       </div>
