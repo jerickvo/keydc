@@ -1,7 +1,7 @@
 // Capturing, strip and sheet composition.
 import { makeCanvas } from './util.js';
 
-const EMPTY_HOLE = '#1a1030';
+const EMPTY_HOLE = '#1b1724';
 
 // Grab the current video frame, cropped around the centre to the box aspect,
 // at the camera's full native resolution.

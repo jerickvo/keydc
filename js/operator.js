@@ -20,10 +20,9 @@ export function initOperator(options) {
     close: $('#op-close'),
     backdrop: $('#operator .op-backdrop'),
     camera: $('#op-camera'),
-    cameraRefresh: $('#op-camera-refresh'),
     cameraStatus: $('#op-camera-status'),
     sheets: $('#op-sheets'),
-    sheetsNote: $('#op-sheets-note'),
+    pack: $('#op-pack'),
     sheetsMinus: $('#op-sheets-minus'),
     sheetsReset: $('#op-sheets-reset'),
     testPrint: $('#op-test-print'),
@@ -92,7 +91,6 @@ export function initOperator(options) {
 
   // camera picker
   el.camera.addEventListener('change', onCameraPicked);
-  el.cameraRefresh.addEventListener('click', () => refreshCameras());
 
   // counter
   el.sheetsMinus.addEventListener('click', () => {
@@ -172,7 +170,7 @@ export async function refreshCameras(cams) {
   lastCams = cams || (await api.camera.listCameras());
   const sel = el.camera;
   sel.textContent = '';
-  addOption(sel, '', 'Automatic (prefers DJI / Pocket)');
+  addOption(sel, '', 'Automatic');
   lastCams.forEach((c, i) => addOption(sel, c.deviceId, c.label || `Camera ${i + 1}`));
   if (settings.cameraId && !lastCams.some((c) => c.deviceId === settings.cameraId)) {
     addOption(sel, settings.cameraId, `${settings.cameraLabel || 'Saved camera'} (not connected)`);
@@ -206,9 +204,10 @@ function refreshStatus() {
   } else {
     el.cameraStatus.textContent = state.cameraError ? `Not connected (${state.cameraError})` : 'Connecting…';
   }
+  el.cameraStatus.title = el.cameraStatus.textContent; // full name if it is cut off
   const n = sheetsSent();
   el.sheets.textContent = String(n);
-  el.sheetsNote.textContent = `${Math.max(0, CONFIG.paperPack - n)} left in a ${CONFIG.paperPack}-sheet pack`;
+  el.pack.textContent = `/ ${CONFIG.paperPack}`;
   el.info.textContent = api.info();
   if (el.log.closest('details').open) {
     el.log.textContent = log

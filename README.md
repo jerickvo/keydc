@@ -158,7 +158,7 @@ To open it, hold the **top-left corner for 2 seconds**, or press **o**. Close it
 | Problem | Fix |
 | --- | --- |
 | "Camera blocked" | Click the camera icon in the address bar (or **Site settings**), set Camera to **Allow**, then tap **Retry**. |
-| "Camera is busy" | Close other tabs/apps using the camera (Meet, Camera app), then **Reconnect**. |
+| "Camera in use" | Close other tabs/apps using the camera (Meet, Camera app), then **Reconnect**. |
 | Built-in camera instead of the Pocket 3 | Check that the Pocket 3 is in Webcam mode, then pick it in the operator menu. |
 | Old version after deploying | Bump `VERSION` in `sw.js` and deploy again. The booth reloads into the new version the next time it is idle (or tap **Reload** in the operator menu). |
 | Print preview shows white margins | Check Paper size in the dialog, or switch the booth's **Page size**. |

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <meta name="theme-color" content="#0a0612">
+  <meta name="theme-color" content="#0c0a12">
   <meta name="color-scheme" content="dark">
   <title>STKEYCLUB Photo Booth</title>
   <link rel="manifest" href="manifest.webmanifest">
@@ -20,14 +20,13 @@
 </head>
 <body>
   <main id="app" data-screen="loading">
-    <div class="brand" aria-hidden="true">STKEYCLUB</div>
     <div id="corner" aria-hidden="true"></div>
 
     <section id="loading" class="screen" aria-live="polite">
       <div class="center-box">
         <div class="spinner" aria-hidden="true"></div>
         <p id="loading-text">Starting camera…</p>
-        <div id="loading-actions" class="actions loading-actions" hidden>
+        <div id="loading-actions" class="actions" hidden>
           <button id="loading-retry" class="btn" type="button">Retry</button>
           <button id="loading-settings" class="btn" type="button">Settings</button>
         </div>
@@ -46,7 +45,7 @@
         <div id="mini-marker"></div>
       </div>
       <div class="booth-actions">
-        <button id="start-btn" class="btn btn-primary btn-xl" type="button">Start</button>
+        <button id="start-btn" class="btn btn-primary btn-lg" type="button">Start</button>
         <div id="progress" class="progress" aria-live="polite"></div>
       </div>
     </section>
@@ -58,41 +57,27 @@
       </div>
       <div class="review-actions">
         <div class="actions-main">
-          <button id="print-btn" class="btn btn-primary btn-xl" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6"/><path d="M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v7H7z"/></svg>
-            <span class="label">Print</span>
-          </button>
+          <button id="print-btn" class="btn btn-primary btn-lg" type="button"><span class="label">Print</span></button>
           <div class="grid">
-            <button id="retake-btn" class="btn" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.64-6.36L3 8"/><path d="M3 3v5h5"/></svg>
-              <span class="label">Retake</span>
-            </button>
-            <button id="filters-btn" class="btn" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><circle cx="15" cy="9" r="5.5"/><circle cx="12" cy="15" r="5.5"/></svg>
-              <span>Filters</span>
-            </button>
-            <button id="download-btn" class="btn" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
-              <span>Download</span>
-            </button>
+            <button id="retake-btn" class="btn" type="button"><span class="label">Retake</span></button>
+            <button id="filters-btn" class="btn" type="button">Filters</button>
+            <button id="download-btn" class="btn btn-quiet" type="button">Download</button>
+            <button id="restart-btn" class="btn btn-quiet" type="button">Start over</button>
           </div>
-          <button id="restart-btn" class="btn btn-quiet" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-            <span>Start over</span>
-          </button>
         </div>
         <div class="filter-pane">
           <div id="filter-list" class="filter-list" role="radiogroup" aria-label="Filters"></div>
-          <button id="filters-done" class="btn btn-primary" type="button">Done</button>
+          <button id="filters-done" class="btn" type="button">Done</button>
         </div>
-        <p id="review-hint" class="hint" aria-live="polite"></p>
-        <p id="idle-hint" class="hint idle-hint" aria-live="polite"></p>
+        <div class="review-notes">
+          <p id="review-hint" class="hint" aria-live="polite"></p>
+          <p id="idle-hint" class="hint idle-hint" aria-live="polite"></p>
+        </div>
       </div>
     </section>
 
     <section id="printing" class="screen" aria-live="polite">
       <div class="center-box">
-        <svg class="big-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6"/><path d="M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v7H7z"/></svg>
         <h1>Printing…</h1>
         <p>This takes about a minute.</p>
       </div>
@@ -100,15 +85,11 @@
 
     <section id="message" class="screen" role="alert">
       <div class="center-box">
-        <svg class="msg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m2 2 20 20"/><path d="M9 4h6l2 3h3a2 2 0 0 1 2 2v9"/><path d="M19.5 20H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3"/><path d="M14.12 14.12A3 3 0 1 1 9.88 9.88"/></svg>
         <h1 id="msg-title">Camera problem</h1>
         <p id="msg-text"></p>
         <div class="actions">
           <button id="msg-retry" class="btn btn-primary" type="button">Reconnect</button>
-          <button id="msg-settings" class="btn" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9"/><path d="M17 6h3"/><circle cx="15" cy="6" r="2"/><path d="M4 12h3"/><path d="M11 12h9"/><circle cx="9" cy="12" r="2"/><path d="M4 18h11"/><path d="M19 18h1"/><circle cx="17" cy="18" r="2"/></svg>
-            <span>Settings</span>
-          </button>
+          <button id="msg-settings" class="btn" type="button">Settings</button>
         </div>
       </div>
     </section>
@@ -125,12 +106,7 @@
         <div class="op-body">
           <section class="op-section">
             <h3>Camera</h3>
-            <div class="op-camera">
-              <select id="op-camera" aria-label="Camera"></select>
-              <button id="op-camera-refresh" class="btn btn-small btn-icon" type="button" aria-label="Refresh camera list">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></svg>
-              </button>
-            </div>
+            <select id="op-camera" class="op-select" aria-label="Camera"></select>
             <p id="op-camera-status" class="op-note"></p>
             <label class="op-row"><span>Mirror preview</span><input type="checkbox" class="switch" data-setting="mirrorPreview"></label>
             <label class="op-row"><span>Mirror saved photo</span><input type="checkbox" class="switch" data-setting="mirrorPhoto"></label>
@@ -154,12 +130,11 @@
             <div class="op-row">
               <span>Sheets sent</span>
               <div class="op-inline">
-                <strong id="op-sheets" class="op-count">0</strong>
+                <span class="op-count"><b id="op-sheets">0</b> <span id="op-pack">/ 108</span></span>
                 <button id="op-sheets-minus" class="btn btn-small" type="button" aria-label="Subtract one sheet">−1</button>
                 <button id="op-sheets-reset" class="btn btn-small" type="button">Reset</button>
               </div>
             </div>
-            <p id="op-sheets-note" class="op-note"></p>
             <button id="op-test-print" class="btn btn-small btn-wide" type="button">Test print</button>
           </section>
 
@@ -187,9 +162,11 @@
 
   <div id="boot-fail" hidden>
     <div class="center-box">
-      <h1>The booth didn't start</h1>
+      <h1>The booth didn’t start</h1>
       <p>Check the internet connection for the first load, then reload.</p>
-      <button id="boot-reload" class="btn btn-primary" type="button">Reload</button>
+      <div class="actions">
+        <button id="boot-reload" class="btn btn-primary" type="button">Reload</button>
+      </div>
     </div>
   </div>
 </body>

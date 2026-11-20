@@ -1039,6 +1039,8 @@ test('layout: every screen fits without scrolling at common Chromebook sizes', a
     [1200, 800],
     [1366, 657], // windowed Chrome (tabs + address bar)
     [1024, 768],
+    [768, 1024], // iPad portrait
+    [390, 844], // phone portrait
   ];
   const ctx = await newContext();
   const page = await openApp(ctx, { init: [syntheticCamera] });
@@ -1067,7 +1069,8 @@ test('layout: every screen fits without scrolling at common Chromebook sizes', a
     await page.setViewportSize({ width: w, height: h });
     await page.evaluate(() => PB.actions.goIdle());
     await page.waitForTimeout(150);
-    await check(`start ${w}x${h}`, ['#viewfinder', '#start-btn', '.mini-wrap']);
+    const portrait = h > w; // the small strip is hidden in portrait
+    await check(`start ${w}x${h}`, portrait ? ['#viewfinder', '#start-btn'] : ['#viewfinder', '#start-btn', '.mini-wrap']);
     if (w === 1280 && h === 800) await shot(page, `15-start-${w}x${h}`);
     await runSession(page);
     await check(`review ${w}x${h}`, ['.strip-wrap', '#print-btn', '#retake-btn', '#filters-btn', '#download-btn', '#restart-btn']);

@@ -75,14 +75,14 @@ const RETAKE_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.64-6.36L3 8"/><path d="M3 3v5h5"/></svg>';
 
 const MESSAGES = {
-  denied: { title: 'Camera blocked', text: 'Allow camera access for this site in Chrome (camera icon in the address bar or Site settings), then tap Retry.', button: 'Retry' },
+  denied: { title: 'Camera blocked', text: 'Allow camera access for this site in Chrome’s site settings, then tap Retry.', button: 'Retry' },
   notfound: { title: 'No camera found', text: 'Plug in the camera. The booth starts as soon as it appears.' },
-  lost: { title: 'Camera disconnected', text: 'Plug the camera back in. It reconnects by itself, or tap Reconnect to use any available camera.' },
-  busy: { title: 'Camera is busy', text: 'Another app or tab is using the camera. Close it, then tap Reconnect.' },
+  lost: { title: 'Camera disconnected', text: 'Plug it back in and the booth reconnects by itself. Reconnect uses any available camera.' },
+  busy: { title: 'Camera in use', text: 'Close any other app or tab using the camera, then tap Reconnect.' },
   timeout: { title: 'Camera not responding', text: 'Unplug the camera, plug it back in, then tap Reconnect.' },
   frozen: { title: 'Camera stopped', text: 'The camera stopped sending video. Check the cable, then tap Reconnect.' },
-  capture: { title: 'Photo failed', text: 'The camera did not give a picture. Tap Reconnect to try again.' },
-  insecure: { title: 'Camera needs HTTPS', text: 'Open the https:// address of the booth (or localhost).', button: 'Retry' },
+  capture: { title: 'Photo failed', text: 'The camera didn’t return a picture. Tap Reconnect to try again.' },
+  insecure: { title: 'Camera needs HTTPS', text: 'Open the booth’s https:// address.', button: 'Retry' },
   unknown: { title: 'Camera problem', text: 'Tap Reconnect. If it keeps happening, reload the booth.' },
 };
 
@@ -158,7 +158,7 @@ function setViewfinderHole(i, slide) {
 function renderMini() {
   const f = state.frame;
   if (!f) return;
-  const cssH = Math.max(240, window.innerHeight * 0.66);
+  const cssH = el.mini.clientHeight || window.innerHeight * 0.8; // render at the size it is shown
   const k = Math.min(1, (cssH * Math.min(2, window.devicePixelRatio || 1)) / f.height);
   composeStrip(f, state.photos, { scale: k, canvas: el.mini, drawPhoto: filteredDrawer(state.filter) });
 }
