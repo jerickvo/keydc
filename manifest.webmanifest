@@ -1,18 +1,36 @@
 {
-  "name": "STKEYCLUB Photo Booth",
-  "short_name": "STKEYCLUB",
-  "description": "Photo booth for STKEYCLUB events. Works offline; photos stay on the device.",
+  "name": "STKEYCLUB Photo booth",
+  "short_name": "Photo booth",
+  "description": "The STKEYCLUB photo booth. Works offline; photos stay on the device.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
-  "display_override": ["fullscreen", "standalone"],
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
   "orientation": "landscape",
-  "background_color": "#0c0a12",
-  "theme_color": "#0c0a12",
+  "background_color": "#181614",
+  "theme_color": "#181614",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

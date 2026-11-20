@@ -4,15 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <meta name="theme-color" content="#0c0a12">
+  <meta name="theme-color" content="#181614">
   <meta name="color-scheme" content="dark">
-  <title>STKEYCLUB Photo Booth</title>
+  <title>STKEYCLUB Photo booth</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="preload" href="fonts/archivo.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
   <style id="page-style">@page { size: 4in 6in; margin: 0; }</style>
   <script src="js/boot-guard.js"></script>
@@ -22,74 +23,99 @@
   <main id="app" data-screen="loading">
     <div id="corner" aria-hidden="true"></div>
 
-    <section id="loading" class="screen" aria-live="polite">
-      <div class="center-box">
-        <div class="spinner" aria-hidden="true"></div>
-        <p id="loading-text">Starting camera…</p>
-        <div id="loading-actions" class="actions" hidden>
-          <button id="loading-retry" class="btn" type="button">Retry</button>
-          <button id="loading-settings" class="btn" type="button">Settings</button>
-        </div>
-      </div>
-    </section>
-
+    <!-- The booth: live mirror on one side, the control panel on the other. -->
     <section id="booth" class="screen" data-phase="idle">
-      <div id="viewfinder" class="viewfinder">
-        <video id="video" class="mirror" autoplay muted playsinline disablepictureinpicture></video>
-        <canvas id="shot" aria-hidden="true"></canvas>
-        <img id="vf-frame" src="frame.png" alt="" draggable="false">
-        <div id="countdown" class="countdown" aria-live="assertive"></div>
-      </div>
-      <div class="mini-wrap" aria-hidden="true">
-        <canvas id="mini"></canvas>
-        <div id="mini-marker"></div>
-      </div>
-      <div class="booth-actions">
-        <button id="start-btn" class="btn btn-primary btn-lg" type="button">Start</button>
-        <div id="progress" class="progress" aria-live="polite"></div>
-      </div>
-    </section>
-
-    <section id="review" class="screen">
-      <div class="strip-wrap" id="strip-wrap">
-        <canvas id="strip" aria-label="Your photo strip"></canvas>
-        <div id="hole-buttons"></div>
-      </div>
-      <div class="review-actions">
-        <div class="actions-main">
-          <button id="print-btn" class="btn btn-primary btn-lg" type="button"><span class="label">Print</span></button>
-          <div class="grid">
-            <button id="retake-btn" class="btn" type="button"><span class="label">Retake</span></button>
-            <button id="filters-btn" class="btn" type="button">Filters</button>
-            <button id="download-btn" class="btn btn-quiet" type="button">Download</button>
-            <button id="restart-btn" class="btn btn-quiet" type="button">Start over</button>
+      <div class="window-area">
+        <div class="window">
+          <div id="viewfinder" class="viewfinder">
+            <video id="video" class="mirror" autoplay muted playsinline disablepictureinpicture></video>
+            <canvas id="shot" aria-hidden="true"></canvas>
+            <img id="vf-frame" src="frame.png" alt="" draggable="false">
+            <div id="vf-flash" aria-hidden="true"></div>
+          </div>
+          <span class="mark tl" aria-hidden="true"></span>
+          <span class="mark tr" aria-hidden="true"></span>
+          <span class="mark bl" aria-hidden="true"></span>
+          <span class="mark br" aria-hidden="true"></span>
+          <div id="loading" class="window-note" aria-live="polite">
+            <p id="loading-text">Starting camera…</p>
+            <div id="loading-actions" class="note-actions" hidden>
+              <button id="loading-retry" class="btn btn-line" type="button">Retry</button>
+              <button id="loading-settings" class="btn-text" type="button">Settings</button>
+            </div>
           </div>
         </div>
-        <div class="filter-pane">
-          <div id="filter-list" class="filter-list" role="radiogroup" aria-label="Filters"></div>
-          <button id="filters-done" class="btn" type="button">Done</button>
+      </div>
+
+      <div class="panel">
+        <p class="wordmark"><b>STKEYCLUB</b> Photo booth</p>
+        <ol id="sequence" class="sequence" aria-label="Your four photos"></ol>
+        <div class="status">
+          <p id="instruction" class="instruction"><span class="lead">Four photos.</span> A three-second countdown before each one. Look at the camera, not the screen.</p>
+          <div id="countdown" class="countdown" aria-live="assertive"></div>
+          <p id="progress" class="progress" aria-live="polite"></p>
         </div>
-        <div class="review-notes">
-          <p id="review-hint" class="hint" aria-live="polite"></p>
-          <p id="idle-hint" class="hint idle-hint" aria-live="polite"></p>
+        <button id="start-btn" class="shutter" type="button">
+          <span class="shutter-disc" aria-hidden="true"></span>
+          <span class="shutter-label">Take photos</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- The finished strip, fresh out of the slot. -->
+    <section id="review" class="screen">
+      <div class="print-area">
+        <div class="slot" aria-hidden="true"></div>
+        <div class="dispense">
+          <div class="strip-wrap" id="strip-wrap">
+            <canvas id="strip" aria-label="Your photo strip"></canvas>
+            <div id="hole-buttons"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel review-panel">
+        <p class="wordmark"><b>STKEYCLUB</b> Photo booth</p>
+        <div class="review-controls">
+          <p class="instruction review-copy" aria-live="polite"><span id="review-lead" class="lead">Your strip.</span> <span id="review-sub">Print it, or retake any photo first.</span></p>
+          <p class="note-line">
+            <span id="print-note" class="print-note">Prints two copies in about a minute.</span>
+            <span id="review-hint" class="hint" aria-live="polite"></span>
+            <span id="idle-hint" class="hint idle-hint" aria-live="polite"></span>
+          </p>
+          <div class="actions-main">
+            <button id="print-btn" class="btn btn-gold" type="button"><span class="label">Print</span></button>
+            <div class="pair">
+              <button id="retake-btn" class="btn btn-line" type="button"><span class="label">Retake a photo</span></button>
+              <button id="filters-btn" class="btn btn-line" type="button">Filters</button>
+            </div>
+            <div class="pair">
+              <button id="download-btn" class="btn-text" type="button">Save a copy</button>
+              <button id="restart-btn" class="btn-text" type="button">Start over</button>
+            </div>
+          </div>
+          <div class="filter-pane">
+            <div id="filter-list" class="filter-list" role="radiogroup" aria-label="Filters"></div>
+            <button id="filters-done" class="btn btn-line" type="button">Done</button>
+          </div>
         </div>
       </div>
     </section>
 
     <section id="printing" class="screen" aria-live="polite">
-      <div class="center-box">
-        <h1>Printing…</h1>
-        <p>This takes about a minute.</p>
+      <div class="note">
+        <h1>Printing</h1>
+        <p id="printing-text">Your strips will be ready in about a minute. There are two on the sheet, so cut it down the middle.</p>
       </div>
     </section>
 
     <section id="message" class="screen" role="alert">
-      <div class="center-box">
+      <div class="note">
         <h1 id="msg-title">Camera problem</h1>
         <p id="msg-text"></p>
-        <div class="actions">
-          <button id="msg-retry" class="btn btn-primary" type="button">Reconnect</button>
-          <button id="msg-settings" class="btn" type="button">Settings</button>
+        <div class="note-actions">
+          <button id="msg-retry" class="btn btn-gold" type="button">Reconnect</button>
+          <button id="msg-settings" class="btn-text" type="button">Settings</button>
         </div>
       </div>
     </section>
@@ -101,7 +127,7 @@
       <aside class="op-panel" role="dialog" aria-modal="true" aria-labelledby="op-title" tabindex="-1">
         <header class="op-head">
           <h2 id="op-title">Operator</h2>
-          <button id="op-close" class="btn btn-small" type="button">Done</button>
+          <button id="op-close" class="btn btn-line btn-small" type="button">Done</button>
         </header>
         <div class="op-body">
           <section class="op-section">
@@ -131,25 +157,25 @@
               <span>Sheets sent</span>
               <div class="op-inline">
                 <span class="op-count"><b id="op-sheets">0</b> <span id="op-pack">/ 108</span></span>
-                <button id="op-sheets-minus" class="btn btn-small" type="button" aria-label="Subtract one sheet">−1</button>
-                <button id="op-sheets-reset" class="btn btn-small" type="button">Reset</button>
+                <button id="op-sheets-minus" class="btn btn-line btn-small" type="button" aria-label="Subtract one sheet">−1</button>
+                <button id="op-sheets-reset" class="btn btn-line btn-small" type="button">Reset</button>
               </div>
             </div>
-            <button id="op-test-print" class="btn btn-small btn-wide" type="button">Test print</button>
+            <button id="op-test-print" class="btn btn-line btn-small btn-wide" type="button">Test print</button>
           </section>
 
           <section class="op-section">
             <h3>Saved sheets</h3>
             <div id="op-sessions" class="op-sessions"></div>
-            <button id="op-clear" class="btn btn-small btn-wide btn-danger" type="button">Clear all</button>
+            <button id="op-clear" class="btn btn-line btn-small btn-wide btn-danger" type="button">Clear all</button>
           </section>
 
           <section class="op-section">
             <h3>Booth</h3>
             <div class="op-row"><span>Idle reset</span><div class="stepper" data-setting="idleReset" data-unit=" s"></div></div>
             <div class="op-buttons">
-              <button id="op-fullscreen" class="btn btn-small" type="button">Full screen</button>
-              <button id="op-reload" class="btn btn-small" type="button">Reload</button>
+              <button id="op-fullscreen" class="btn btn-line btn-small" type="button">Full screen</button>
+              <button id="op-reload" class="btn btn-line btn-small" type="button">Reload</button>
             </div>
             <p id="op-info" class="op-note"></p>
             <details class="op-log"><summary>Log</summary><pre id="op-log"></pre></details>
@@ -161,11 +187,11 @@
   </main>
 
   <div id="boot-fail" hidden>
-    <div class="center-box">
+    <div class="note">
       <h1>The booth didn’t start</h1>
       <p>Check the internet connection for the first load, then reload.</p>
-      <div class="actions">
-        <button id="boot-reload" class="btn btn-primary" type="button">Reload</button>
+      <div class="note-actions">
+        <button id="boot-reload" class="btn btn-gold" type="button">Reload</button>
       </div>
     </div>
   </div>

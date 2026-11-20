@@ -253,6 +253,21 @@ test('flow: 4 shots with the fake camera, strip is 600x1800', async () => {
   await ctx.close();
 });
 
+test('flash: the mirror does not flash again when the start screen comes back', async () => {
+  const ctx = await newContext();
+  const page = await openApp(ctx, { settings: { ...FAST, flash: true } });
+  await runSession(page);
+  await page.click('#restart-btn');
+  await waitForScreen(page, 'booth');
+  await page.waitForTimeout(60);
+  const r = await page.evaluate(() => {
+    const f = document.querySelector('#vf-flash');
+    return { armed: f.classList.contains('go'), opacity: Number(getComputedStyle(f).opacity) };
+  });
+  assert.deepEqual(r, { armed: false, opacity: 0 });
+  await ctx.close();
+});
+
 test('composite: holes hold photo pixels, frame (logo) is drawn on top', async () => {
   const ctx = await newContext();
   const page = await openApp(ctx, { init: [syntheticCamera] });
@@ -834,6 +849,7 @@ test('offline: precache list covers every app file', async () => {
   const needed = ['index.html', 'styles.css', 'config.js', 'frame.png', 'manifest.webmanifest'];
   for (const f of fs.readdirSync(path.join(ROOT, 'js'))) needed.push('js/' + f);
   for (const f of fs.readdirSync(path.join(ROOT, 'icons'))) needed.push('icons/' + f);
+  for (const f of fs.readdirSync(path.join(ROOT, 'fonts'))) if (f.endsWith('.woff2')) needed.push('fonts/' + f);
   for (const f of needed) assert.ok(listed.has(f), `${f} is not in the sw.js ASSETS list (it would be missing offline)`);
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.webmanifest'), 'utf8'));
   for (const icon of manifest.icons) assert.ok(fs.existsSync(path.join(ROOT, icon.src)), `manifest icon missing: ${icon.src}`);
@@ -1029,53 +1045,96 @@ test('filters: the operator can turn filters off', async () => {
   await ctx.close();
 });
 
-test('layout: every screen fits without scrolling at common Chromebook sizes', async () => {
+test('layout: every screen fits, nothing overlaps, at kiosk, tablet and phone sizes', async () => {
   const sizes = [
     [1366, 768],
     [1280, 720],
     [1536, 864],
     [1920, 1080],
+    [1440, 900],
     [1280, 800],
     [1200, 800],
     [1366, 657], // windowed Chrome (tabs + address bar)
     [1024, 768],
-    [768, 1024], // iPad portrait
-    [390, 844], // phone portrait
+    [768, 1024], // tablet portrait
+    [414, 896], // phones, portrait
+    [390, 844],
+    [360, 740],
+    [320, 568],
+    [844, 390], // phones, sideways
+    [568, 320],
   ];
   const ctx = await newContext();
   const page = await openApp(ctx, { init: [syntheticCamera] });
-  const check = async (label, selectors) => {
-    const r = await page.evaluate((sels) => {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const bad = [];
-      for (const sel of sels) {
-        const el = document.querySelector(sel);
-        if (!el) {
-          bad.push(`${sel} missing`);
-          continue;
+  // inside: each element is visible and on screen. apart: pairs of elements that must not overlap.
+  const check = async (label, inside, apart = []) => {
+    const r = await page.evaluate(
+      ({ inside, apart }) => {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const bad = [];
+        const box = (sel) => {
+          const el = document.querySelector(sel);
+          return el ? el.getBoundingClientRect() : null;
+        };
+        for (const sel of inside) {
+          const b = box(sel);
+          if (!b) bad.push(`${sel} missing`);
+          else if (b.width === 0 || b.height === 0) bad.push(`${sel} not visible`);
+          else if (b.left < -1 || b.top < -1 || b.right > vw + 1 || b.bottom > vh + 1) bad.push(`${sel} outside ${vw}x${vh}: ${Math.round(b.left)},${Math.round(b.top)},${Math.round(b.right)},${Math.round(b.bottom)}`);
         }
-        const b = el.getBoundingClientRect();
-        if (b.width === 0 || b.height === 0) bad.push(`${sel} not visible`);
-        else if (b.left < -1 || b.top < -1 || b.right > vw + 1 || b.bottom > vh + 1) bad.push(`${sel} outside ${vw}x${vh}: ${Math.round(b.left)},${Math.round(b.top)},${Math.round(b.right)},${Math.round(b.bottom)}`);
-      }
-      const se = document.scrollingElement;
-      if (se.scrollHeight > vh + 1 || se.scrollWidth > vw + 1) bad.push('page scrolls');
-      return bad;
-    }, selectors);
+        for (const [a, c] of apart) {
+          const p = box(a);
+          const q = box(c);
+          if (!p || !q || !p.width || !q.width) continue;
+          const ox = Math.min(p.right, q.right) - Math.max(p.left, q.left);
+          const oy = Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top);
+          if (ox > 1 && oy > 1) bad.push(`${a} overlaps ${c} by ${Math.round(oy)}px`);
+        }
+        const se = document.scrollingElement;
+        if (se.scrollHeight > vh + 1 || se.scrollWidth > vw + 1) bad.push('page scrolls');
+        return bad;
+      },
+      { inside, apart }
+    );
     assert.deepEqual(r, [], label);
   };
   for (const [w, h] of sizes) {
     await page.setViewportSize({ width: w, height: h });
     await page.evaluate(() => PB.actions.goIdle());
     await page.waitForTimeout(150);
-    const portrait = h > w; // the small strip is hidden in portrait
-    await check(`start ${w}x${h}`, portrait ? ['#viewfinder', '#start-btn'] : ['#viewfinder', '#start-btn', '.mini-wrap']);
+    await check(
+      `start ${w}x${h}`,
+      ['#viewfinder', '#sequence', '#instruction', '#start-btn'],
+      [
+        ['#booth .wordmark', '#sequence'],
+        ['#sequence', '#instruction'],
+        ['#instruction', '#start-btn'],
+        ['#viewfinder', '#sequence'],
+        ['#viewfinder', '#instruction'],
+        ['#viewfinder', '#start-btn'],
+      ]
+    );
     if (w === 1280 && h === 800) await shot(page, `15-start-${w}x${h}`);
     await runSession(page);
-    await check(`review ${w}x${h}`, ['.strip-wrap', '#print-btn', '#retake-btn', '#filters-btn', '#download-btn', '#restart-btn']);
+    // let the strip finish coming out of the slot
+    await page.waitForFunction(() => !document.querySelector('.strip-wrap').getAnimations().some((a) => a.playState === 'running'));
+    const reviewInside = ['.strip-wrap', '#print-btn', '#retake-btn', '#filters-btn', '#download-btn', '#restart-btn'];
+    const reviewApart = [
+      ['#review .wordmark', '.strip-wrap'],
+      ['.strip-wrap', '.review-controls'],
+      ['.review-copy', '.note-line'],
+      ['.note-line', '#print-btn'],
+    ];
+    await check(`review ${w}x${h}`, reviewInside, reviewApart);
+    await page.click('#retake-btn');
+    await check(`retake ${w}x${h}`, reviewInside, reviewApart);
+    await page.click('#retake-btn');
     await page.click('#filters-btn');
-    await check(`filters ${w}x${h}`, ['.strip-wrap', '.filter-list', '#filters-done']);
+    await check(`filters ${w}x${h}`, ['.strip-wrap', '.filter-list', '#filters-done'], [
+      ['.strip-wrap', '.review-controls'],
+      ['.review-copy', '.filter-list'],
+    ]);
     if (w === 1024 && h === 768) await shot(page, `16-filters-${w}x${h}`);
     await page.click('#filters-done');
   }

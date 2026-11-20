@@ -1,51 +1,43 @@
-/* STKEYCLUB Photo Booth */
+/* STKEYCLUB Photo booth */
+
+@font-face {
+  font-family: "Archivo";
+  src: url("fonts/archivo.woff2") format("woff2");
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   color-scheme: dark;
 
-  /* colour */
-  --bg: #0c0a12;
-  --raised: #17141f;
-  --fill: rgba(255, 255, 255, 0.07);
-  --fill-hover: rgba(255, 255, 255, 0.1);
-  --fill-active: rgba(255, 255, 255, 0.14);
-  --text: #f4f0fb;
-  --muted: #a49db6;
-  --faint: #6d667f;
-  --accent: #d13580; /* white text on it: 4.6:1, darker in every other state */
-  --accent-hover: #c42f78;
-  --accent-active: #ad286a;
-  --accent-text: #ff86b9; /* accent used as text on dark surfaces */
-  --focus: #3ee6d4;
-  --scrim: rgba(8, 6, 12, 0.6);
+  /* The inside of the booth, photo paper, and the one button you press. */
+  --booth: #181614;
+  --booth-2: #211e1b;
+  --fill: rgba(242, 237, 228, 0.07);
+  --fill-2: rgba(242, 237, 228, 0.13);
+  --paper: #f2ede4;
+  --dim: #a59e94;
+  --faint: #6f695f;
+  --line: rgba(242, 237, 228, 0.16);
+  --line-2: rgba(242, 237, 228, 0.36);
+  --gold: #f2b53b;
+  --gold-press: #d99f2a;
+  --on-gold: #1c1711;
+  --slot: #0a0908;
+  --empty: #100f0d;
 
-  /* shape: controls, parts inside controls, photos */
-  --r: 10px;
-  --r-inner: 6px;
-  --r-media: 4px;
+  --font: "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --t-body: clamp(15px, 2.1vh, 18px);
+  --t-control: clamp(16px, 2.3vh, 19px);
 
-  /* type */
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --t-title: clamp(28px, 4.4vh, 36px);
-  --t-body: clamp(16px, 2.4vh, 19px);
-  --t-control: clamp(17px, 2.5vh, 20px);
-  --t-control-lg: clamp(20px, 3.1vh, 25px);
-
-  /* space */
-  --s-1: 8px;
-  --s-2: clamp(10px, 1.6vh, 14px);
-  --s-3: clamp(14px, 2.2vh, 20px);
-  --s-4: clamp(20px, 3.6vh, 32px);
-  --edge-x: clamp(16px, 4vw, 56px);
-  --edge-y: clamp(20px, 5vh, 56px);
   --vh: 100vh;
-
-  /* control heights (touch first) */
-  --h-control: clamp(52px, 8vh, 64px);
-  --h-control-lg: clamp(60px, 10vh, 80px);
-
+  --edge: clamp(14px, 3.2vh, 40px);
+  --gap: clamp(16px, 2.8vw, 48px);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --frame-ar: 1 / 3;
+  --hole-ar: 1.4663; /* set from frame.png at load */
 }
 
 @supports (height: 100dvh) {
@@ -68,8 +60,8 @@ body {
 
 body {
   overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--booth);
+  color: var(--paper);
   font-family: var(--font);
   font-size: 16px;
   line-height: 1.4;
@@ -83,8 +75,8 @@ body {
 }
 
 ::selection {
-  background: rgba(209, 53, 128, 0.5);
-  color: #fff;
+  background: rgba(242, 181, 59, 0.4);
+  color: var(--paper);
 }
 
 button,
@@ -98,15 +90,15 @@ select {
 }
 
 :where(button, select, input, summary):focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
+  outline: 2px solid var(--paper);
+  outline-offset: 3px;
 }
 
 #app {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--booth);
 }
 
 /* ---------- screens ---------- */
@@ -117,16 +109,34 @@ select {
   display: none;
 }
 
-#app[data-screen="loading"] #loading,
+#app[data-screen="loading"] #booth,
+#app[data-screen="booth"] #booth,
+#app[data-screen="review"] #review {
+  display: grid;
+}
+
 #app[data-screen="message"] #message,
 #app[data-screen="printing"] #printing {
   display: grid;
   place-items: center;
 }
 
-#app[data-screen="booth"] #booth,
-#app[data-screen="review"] #review {
-  display: grid;
+/* ---------- shared type ---------- */
+
+.wordmark {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.wordmark b {
+  margin-right: 0.35em;
+  font-weight: 800;
+  font-stretch: 80%;
+  letter-spacing: 0.06em;
+  color: var(--paper);
 }
 
 /* ---------- buttons ---------- */
@@ -136,54 +146,70 @@ select {
   -webkit-appearance: none;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-height: var(--h-control);
-  padding: 0 1.4em;
+  justify-content: flex-start;
+  min-height: 56px;
+  padding: 0 20px;
   border: 0;
-  border-radius: var(--r);
-  background: var(--fill);
-  color: var(--text);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--paper);
   font-size: var(--t-control);
   font-weight: 600;
   line-height: 1;
+  text-align: left;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
-.btn:active {
-  background: var(--fill-active);
+/* The one gold button on a screen: the thing the booth wants you to do next. */
+.btn-gold {
+  min-height: 64px;
+  background: var(--gold);
+  color: var(--on-gold);
+  font-size: clamp(18px, 2.7vh, 22px);
+  font-weight: 700;
 }
 
-.btn-primary {
-  background: var(--accent);
-  color: #fff;
+.btn-gold:active {
+  background: var(--gold-press);
 }
 
-.btn-primary:active {
-  background: var(--accent-active);
+.btn-line {
+  box-shadow: inset 0 0 0 1.5px var(--line-2);
 }
 
-.btn-lg {
-  min-height: var(--h-control-lg);
-  padding: 0 2em;
-  font-size: var(--t-control-lg);
+.btn-line:active {
+  background: var(--fill-2);
 }
 
-.btn-quiet {
-  background: transparent;
-  color: var(--muted);
+.btn-text {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-size: var(--t-control);
+  font-weight: 500;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--line-2);
+  text-underline-offset: 5px;
+  cursor: pointer;
+  transition: color 0.15s;
 }
 
-.btn-quiet:active {
-  background: var(--fill);
-  color: var(--text);
+.btn-text:active {
+  color: var(--paper);
 }
 
 .btn-small {
   min-height: 44px;
-  padding: 0 16px;
+  padding: 0 14px;
   font-size: 15px;
 }
 
@@ -192,67 +218,69 @@ select {
 }
 
 .btn-danger {
-  color: var(--accent-text);
+  color: #ff9a86;
 }
 
 .btn.armed {
-  background: var(--fill-active);
-  color: var(--accent-text);
+  background: var(--fill-2);
+  color: var(--gold);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .btn:hover {
-    background: var(--fill-hover);
-  }
-
-  .btn-primary:hover {
-    background: var(--accent-hover);
-  }
-
-  .btn-quiet:hover {
+  .btn-line:hover {
     background: var(--fill);
-    color: var(--text);
+  }
+
+  .btn-gold:hover {
+    background: var(--gold-press);
+  }
+
+  .btn-text:hover {
+    color: var(--paper);
   }
 }
 
 .btn:disabled,
 .btn:disabled:hover {
   background: var(--fill);
-  color: var(--muted);
+  box-shadow: none;
+  color: var(--dim);
   cursor: default;
 }
 
-/* ---------- booth (start + capture) ---------- */
+/* ---------- booth ---------- */
 
-/* The viewfinder and the small strip share one row and one height; Start sits
-   under the viewfinder. The viewfinder takes all the room the screen allows. */
+/* The mirror takes all the room the screen allows; the panel gets what is left. */
 #booth {
-  --hole-ar: 1.4663; /* set from the frame at load */
-  --gap-x: clamp(20px, 3vw, 48px);
+  --panel-min: clamp(260px, 20vw, 300px);
+  --panel-w: clamp(var(--panel-min), calc(100vw - 2 * var(--edge) - var(--gap) - (var(--vh) - 2 * var(--edge)) * var(--hole-ar)), 400px);
   --vf-h: min(
-    calc(var(--vh) - 2 * var(--edge-y) - var(--h-control-lg) - var(--s-4)),
-    calc((100vw - 2 * var(--edge-x) - var(--gap-x)) / (var(--hole-ar) + 0.3334))
+    calc(var(--vh) - 2 * var(--edge)),
+    calc((100vw - 2 * var(--edge) - var(--gap) - var(--panel-w)) / var(--hole-ar))
   );
-  grid-template-columns: auto auto;
-  grid-template-rows: auto auto;
-  justify-content: center;
-  align-content: center;
-  column-gap: var(--gap-x);
-  row-gap: var(--s-4);
-  padding: var(--edge-y) var(--edge-x);
+  grid-template-columns: minmax(0, 1fr) var(--panel-w);
+  align-items: center;
+  column-gap: var(--gap);
+  padding: var(--edge);
+}
+
+.window-area {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+
+.window {
+  position: relative;
 }
 
 .viewfinder {
   --ar: var(--hole-ar);
   position: relative;
-  grid-column: 1;
-  grid-row: 1;
   height: var(--vf-h);
   aspect-ratio: var(--ar);
   overflow: hidden;
-  border-radius: var(--r-media);
   background: #000;
-  container-type: size;
 }
 
 .viewfinder > * {
@@ -265,10 +293,15 @@ select {
 #video {
   object-fit: cover;
   background: #000;
+  transition: opacity 0.5s ease;
 }
 
 #video.mirror {
   transform: scaleX(-1);
+}
+
+#app[data-screen="loading"] #video {
+  opacity: 0;
 }
 
 #shot {
@@ -289,130 +322,345 @@ select {
   transition: top 0.6s var(--ease), left 0.6s var(--ease);
 }
 
-.countdown {
+#vf-flash {
   inset: 0;
   z-index: 3;
-  display: grid;
-  place-items: center;
-  font-size: 78cqh;
-  font-weight: 700;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  color: #fff;
-  text-shadow: 0 4px 40px rgba(0, 0, 0, 0.4);
+  background: #fffaf1;
+  opacity: 0;
   pointer-events: none;
 }
 
-.countdown:empty {
-  display: none;
+#vf-flash.go {
+  animation: vf-flash 0.5s ease-out;
 }
 
-.countdown.pop {
-  animation: count 1s var(--ease) both;
-}
-
-@keyframes count {
-  0% { opacity: 0; transform: scale(1.08); }
-  14% { opacity: 1; transform: scale(1); }
-  86% { opacity: 1; }
+@keyframes vf-flash {
+  0% { opacity: 0.95; }
   100% { opacity: 0; }
 }
 
-.booth-actions {
-  grid-column: 1;
-  grid-row: 2;
-  display: grid;
-  place-items: center;
-  height: var(--h-control-lg);
+/* Viewfinder framing marks just outside the corners of the picture. */
+.mark {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 0 solid var(--line-2);
+  pointer-events: none;
 }
 
-#start-btn {
-  min-width: clamp(200px, 20vw, 280px);
+.mark.tl { top: -9px; left: -9px; border-top-width: 1.5px; border-left-width: 1.5px; }
+.mark.tr { top: -9px; right: -9px; border-top-width: 1.5px; border-right-width: 1.5px; }
+.mark.bl { bottom: -9px; left: -9px; border-bottom-width: 1.5px; border-left-width: 1.5px; }
+.mark.br { bottom: -9px; right: -9px; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+
+/* Camera starting: the note sits in the empty window. */
+.window-note {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px;
+  text-align: center;
+}
+
+#app[data-screen="loading"] .window-note {
+  display: flex;
+}
+
+.window-note p {
+  margin: 0;
+  font-size: var(--t-body);
+  color: var(--dim);
+}
+
+.note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 28px;
+}
+
+.note-actions[hidden] {
+  display: none;
+}
+
+/* The panel: wordmark, the four frames, the count, the button. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: var(--vf-h);
+  min-width: 0;
+}
+
+.sequence {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: clamp(14px, 3vh, 28px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.frame {
+  position: relative;
+  aspect-ratio: var(--hole-ar);
+  background: var(--empty);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.frame.filled {
+  box-shadow: none;
+}
+
+.frame.current {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.status {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 0;
+  padding-bottom: clamp(18px, 4vh, 40px);
+}
+
+#booth:not([data-phase="idle"]) .status {
+  justify-content: center;
+  padding-bottom: 0;
+}
+
+.instruction {
+  max-width: 22em;
+  margin: 0;
+  font-size: var(--t-body);
+  line-height: 1.45;
+  color: var(--dim);
+  text-wrap: pretty;
+}
+
+.instruction .lead {
+  display: block;
+  margin-bottom: 8px;
+  font-size: clamp(26px, 4.6vh, 40px);
+  font-weight: 700;
+  font-stretch: 85%;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--paper);
+}
+
+.countdown {
+  display: none;
+  font-size: min(44vh, calc(var(--panel-w) * 1.25));
+  font-weight: 700;
+  font-stretch: 62%;
+  line-height: 0.8;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--paper);
+}
+
+.countdown.pop {
+  animation: tick 0.35s var(--ease) both;
+}
+
+@keyframes tick {
+  from { opacity: 0; transform: translateY(6%); }
 }
 
 .progress {
   display: none;
-  font-size: var(--t-control-lg);
+  margin: 18px 0 0;
+  font-size: var(--t-control);
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
 
-#booth:not([data-phase="idle"]) #start-btn {
+.progress small {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--t-body);
+  font-weight: 400;
+  color: var(--dim);
+}
+
+#booth:not([data-phase="idle"]) .instruction {
   display: none;
+}
+
+#booth:not([data-phase="idle"]) .countdown:not(:empty) {
+  display: block;
 }
 
 #booth:not([data-phase="idle"]) .progress {
   display: block;
 }
 
-.mini-wrap {
-  position: relative;
-  grid-column: 2;
-  grid-row: 1;
-  height: var(--vf-h);
-  aspect-ratio: var(--frame-ar);
-}
-
-#mini {
-  display: block;
+/* The shutter: a real, round button with its label beside it. */
+.shutter {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  align-items: center;
+  gap: clamp(16px, 2vh, 22px);
   width: 100%;
-  height: 100%;
-  border-radius: var(--r-media);
+  padding: 10px 0 0;
+  border: 0;
+  background: none;
+  color: var(--paper);
+  text-align: left;
+  cursor: pointer;
 }
 
-#mini-marker {
+.shutter-disc {
+  position: relative;
+  flex: none;
+  margin: 8px 0 8px 8px;
+  width: clamp(56px, 11vh, 92px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--gold);
+  transition: transform 0.09s ease-out, background-color 0.15s;
+}
+
+.shutter-disc::before {
+  content: "";
   position: absolute;
-  display: none;
-  border-radius: var(--r-media);
-  outline: 2px solid var(--focus);
-  outline-offset: 1px;
+  inset: -8px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 50%;
 }
 
-#mini-marker.on {
-  display: block;
+.shutter:active .shutter-disc {
+  transform: scale(0.93);
+  background: var(--gold-press);
+}
+
+.shutter-label {
+  font-size: clamp(18px, 2.9vh, 24px);
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.shutter:focus-visible {
+  outline: none;
+}
+
+.shutter:focus-visible .shutter-disc::before {
+  border-color: var(--paper);
+  border-width: 2px;
+}
+
+#booth:not([data-phase="idle"]) .shutter {
+  display: none;
+}
+
+#app[data-screen="loading"] .shutter {
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 #flash {
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: #fff;
+  background: #fffaf1;
   opacity: 0;
   pointer-events: none;
 }
 
 #flash.go {
-  animation: flash 0.6s ease-out;
+  animation: page-flash 0.45s ease-out;
 }
 
-@keyframes flash {
-  0% { opacity: 1; }
-  30% { opacity: 0.85; }
+@keyframes page-flash {
+  0% { opacity: 0.3; }
   100% { opacity: 0; }
 }
 
-/* ---------- review ---------- */
+/* A photo on its way from the mirror into its frame. */
+.flyer {
+  position: fixed;
+  z-index: 40;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+/* ---------- review: the strip comes out of the slot ---------- */
 
 #review {
-  --strip-h: calc(var(--vh) - 2 * var(--edge-y));
-  grid-template-columns: auto clamp(280px, 30vw, 440px);
+  --strip-h: calc(var(--vh) - 2 * var(--edge) - 6px);
+  --panel-w: clamp(260px, 30vw, 400px);
+  grid-template-columns: auto var(--panel-w);
   justify-content: center;
+  column-gap: clamp(40px, 8vw, 128px);
+  padding: var(--edge);
+}
+
+.print-area {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  column-gap: clamp(32px, 6vw, 96px);
-  padding: var(--edge-y) var(--edge-x);
+  min-width: 0;
+}
+
+.slot {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  width: calc(var(--strip-h) / 3 + 36px);
+  height: 12px;
+  border-radius: 6px;
+  background: var(--slot);
+  box-shadow: inset 0 3px 4px rgba(0, 0, 0, 0.9);
+}
+
+/* Clips the strip at the slot so it seems to come out of it. */
+.dispense {
+  margin: -6px -48px -48px;
+  padding: 0 48px 48px;
+  overflow: hidden;
 }
 
 .strip-wrap {
   position: relative;
   height: var(--strip-h);
   aspect-ratio: var(--frame-ar);
+  box-shadow: 0 26px 40px -22px rgba(0, 0, 0, 0.9);
+}
+
+.strip-wrap.dispensing {
+  animation: dispense 1s cubic-bezier(0.25, 0.8, 0.25, 1) both;
+}
+
+.strip-wrap.retracting {
+  animation: retract 0.45s cubic-bezier(0.5, 0, 0.8, 0.2) forwards;
+}
+
+@keyframes dispense {
+  from { transform: translateY(calc(-100% - 8px)); }
+}
+
+@keyframes retract {
+  to { transform: translateY(calc(-100% - 8px)); }
 }
 
 #strip {
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: var(--r-media);
 }
 
 #hole-buttons {
@@ -427,54 +675,107 @@ select {
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: var(--r-media);
-  background: rgba(12, 10, 18, 0.5);
-  color: #fff;
+  background: rgba(24, 22, 20, 0.55);
+  color: var(--paper);
+  font-size: clamp(13px, 1.9vh, 16px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
   cursor: pointer;
   pointer-events: auto;
-  transition: background-color 0.15s;
+  transition: background-color 0.12s;
 }
 
-.hole-btn svg {
-  width: 26%;
-  max-width: 56px;
-  height: auto;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.75;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.hole-btn span {
+  padding: 6px 10px;
+  box-shadow: inset 0 0 0 1.5px var(--paper);
 }
 
 .hole-btn:active {
-  background: rgba(12, 10, 18, 0.25);
+  background: rgba(24, 22, 20, 0.25);
 }
 
 #review.retake-mode .hole-btn {
   display: grid;
 }
 
-/* The notes sit below the buttons without taking part in the layout, so the
-   buttons stay centred on the strip. */
-.review-actions {
-  position: relative;
+.review-panel {
+  height: auto;
+  align-self: stretch;
+}
+
+/* Copy, status line, then the buttons. The buttons and the filters share one
+   cell, so opening Filters never changes the size of anything else. */
+.review-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: auto;
+}
+
+.actions-main,
+.filter-pane {
+  grid-row: 3;
+  grid-column: 1;
+  align-self: end;
+}
+
+.review-copy {
+  grid-row: 1;
+  margin-bottom: clamp(16px, 3.4vh, 32px);
+}
+
+/* One quiet line above the buttons: what Print gives you, or a passing message
+   ("Saved to Downloads", "Starting over in 8…") in its place. */
+.note-line {
+  grid-row: 2;
+  display: grid;
+  min-height: 1.45em;
+  margin: 0 0 10px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--dim);
+}
+
+.note-line > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.note-line:has(.hint:not(:empty)) .print-note,
+.note-line:has(.idle-hint:not(:empty)) #review-hint,
+#review.filters-open .print-note,
+#review.retake-mode .print-note {
+  visibility: hidden;
+}
+
+.idle-hint {
+  color: var(--paper);
+  font-weight: 600;
 }
 
 .actions-main,
 .filter-pane {
   display: flex;
   flex-direction: column;
-  gap: var(--s-3);
+  gap: 12px;
 }
 
-.actions-main .grid {
+.actions-main .btn,
+.actions-main .btn-text {
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s, opacity 0.2s;
+}
+
+#review .actions-main [inert] {
+  opacity: 0.25;
+}
+
+.review-panel .btn {
+  width: 100%;
+}
+
+.pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--s-3);
-}
-
-.review-actions .btn {
-  width: 100%;
+  gap: 12px;
 }
 
 #review.no-filters #filters-btn {
@@ -487,31 +788,30 @@ select {
 
 .filter-pane,
 #review.filters-open .actions-main {
-  display: none;
+  visibility: hidden;
 }
 
 #review.filters-open .filter-pane {
-  display: flex;
+  visibility: visible;
 }
 
 .filter-list {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--s-2);
+  gap: 10px;
 }
 
 .filter-item {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--s-1);
+  align-items: flex-start;
+  gap: 8px;
   min-width: 0;
   padding: 0;
   border: 0;
-  border-radius: var(--r-media);
   background: none;
-  color: var(--muted);
-  font-size: 15px;
+  color: var(--dim);
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -520,104 +820,54 @@ select {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: var(--r-media);
   outline: 2px solid transparent;
   outline-offset: 3px;
   transition: outline-color 0.15s;
 }
 
 .filter-item[aria-checked="true"] {
-  color: var(--text);
+  color: var(--paper);
 }
 
 .filter-item[aria-checked="true"] canvas {
-  outline-color: var(--focus);
+  outline-color: var(--gold);
 }
 
-.review-notes {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin-top: var(--s-4);
-  text-align: center;
+/* ---------- printing, messages ---------- */
+
+.note {
+  width: min(34rem, 100%);
+  padding: 0 var(--edge);
 }
 
-.hint {
-  min-height: 1.4em;
+.note h1 {
   margin: 0;
-  font-size: var(--t-body);
-  color: var(--muted);
-}
-
-.idle-hint {
-  color: var(--text);
-}
-
-/* ---------- loading, messages ---------- */
-
-.center-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  max-width: 36em;
-  padding: 0 var(--edge-x);
-  text-align: center;
-}
-
-.center-box h1 {
-  margin: 0;
-  font-size: var(--t-title);
-  font-weight: 600;
-  line-height: 1.15;
+  font-size: clamp(32px, 6vh, 52px);
+  font-weight: 700;
+  font-stretch: 82%;
+  line-height: 1.02;
   letter-spacing: -0.015em;
   text-wrap: balance;
 }
 
-.center-box p {
-  margin: 12px 0 0;
+.note p {
+  margin: 14px 0 0;
   font-size: var(--t-body);
-  line-height: 1.45;
-  color: var(--muted);
+  line-height: 1.5;
+  color: var(--dim);
   text-wrap: pretty;
 }
 
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--s-2);
-  margin-top: var(--s-4);
+.note .note-actions {
+  margin-top: 32px;
 }
 
-.actions .btn {
-  min-width: 160px;
-}
-
-.actions[hidden] {
-  display: none;
+.note .btn-gold {
+  min-width: 180px;
 }
 
 #printing {
   cursor: pointer;
-}
-
-.spinner {
-  width: 36px;
-  height: 36px;
-  margin-bottom: var(--s-3);
-  border: 3px solid var(--fill-active);
-  border-top-color: var(--muted);
-  border-radius: 50%;
-  animation: spin 0.9s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-#loading p {
-  margin-top: 0;
 }
 
 #boot-fail {
@@ -626,8 +876,8 @@ select {
   z-index: 100;
   display: grid;
   place-items: center;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--booth);
+  color: var(--paper);
 }
 
 #boot-fail[hidden] {
@@ -654,7 +904,7 @@ select {
   width: 0;
   height: 0;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(242, 237, 228, 0.14);
   opacity: 0;
 }
 
@@ -683,7 +933,7 @@ select {
 .op-backdrop {
   position: absolute;
   inset: 0;
-  background: var(--scrim);
+  background: rgba(10, 9, 8, 0.6);
 }
 
 .op-panel {
@@ -693,8 +943,8 @@ select {
   bottom: 0;
   display: flex;
   flex-direction: column;
-  width: min(480px, 100vw);
-  background: var(--raised);
+  width: min(460px, 100vw);
+  background: var(--booth-2);
   outline: none;
   animation: panel-in 0.2s var(--ease);
 }
@@ -713,7 +963,8 @@ select {
 .op-head h2 {
   margin: 0;
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 700;
+  font-stretch: 85%;
 }
 
 .op-body {
@@ -722,7 +973,7 @@ select {
   padding: 4px 24px 40px;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--line-2) transparent;
 }
 
 .op-section + .op-section {
@@ -733,7 +984,7 @@ select {
   margin: 0 0 4px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--dim);
 }
 
 .op-row {
@@ -753,7 +1004,7 @@ label.op-row {
   margin: 6px 0 8px;
   font-size: 13px;
   line-height: 1.4;
-  color: var(--muted);
+  color: var(--dim);
 }
 
 #op-camera-status {
@@ -770,17 +1021,17 @@ label.op-row {
   margin-top: 8px;
   padding: 0 40px 0 14px;
   border: 0;
-  border-radius: var(--r);
-  background: var(--fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23a49db6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 16px center / 12px 8px;
-  color: var(--text);
+  border-radius: 2px;
+  background: var(--fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23a59e94' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 16px center / 12px 8px;
+  color: var(--paper);
   font-size: 16px;
   text-overflow: ellipsis;
   cursor: pointer;
 }
 
 .op-select option {
-  background: var(--raised);
-  color: var(--text);
+  background: var(--booth-2);
+  color: var(--paper);
 }
 
 .switch {
@@ -788,11 +1039,11 @@ label.op-row {
   -webkit-appearance: none;
   position: relative;
   flex: none;
-  width: 50px;
-  height: 30px;
+  width: 48px;
+  height: 28px;
   margin: 0;
-  border-radius: var(--r);
-  background: var(--fill-active);
+  border-radius: 14px;
+  background: var(--fill-2);
   cursor: pointer;
   transition: background-color 0.15s;
 }
@@ -802,19 +1053,20 @@ label.op-row {
   position: absolute;
   top: 4px;
   left: 4px;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--r-inner);
-  background: #fff;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--paper);
   transition: transform 0.2s var(--ease);
 }
 
 .switch:checked {
-  background: var(--accent);
+  background: var(--gold);
 }
 
 .switch:checked::after {
   transform: translateX(20px);
+  background: var(--on-gold);
 }
 
 .stepper {
@@ -828,7 +1080,7 @@ label.op-row {
   height: 44px;
   padding: 0;
   border: 0;
-  border-radius: var(--r);
+  border-radius: 2px;
   background: var(--fill);
   font-size: 20px;
   line-height: 1;
@@ -837,7 +1089,7 @@ label.op-row {
 }
 
 .stepper button:active {
-  background: var(--fill-active);
+  background: var(--fill-2);
 }
 
 .stepper button:disabled {
@@ -855,18 +1107,18 @@ label.op-row {
 .seg {
   display: inline-flex;
   gap: 2px;
-  padding: 4px;
-  border-radius: var(--r);
+  padding: 3px;
+  border-radius: 2px;
   background: var(--fill);
 }
 
 .seg button {
-  min-height: 36px;
+  min-height: 38px;
   padding: 0 12px;
   border: 0;
-  border-radius: var(--r-inner);
+  border-radius: 1px;
   background: transparent;
-  color: var(--muted);
+  color: var(--dim);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -874,21 +1126,21 @@ label.op-row {
 }
 
 .seg button:active {
-  color: var(--text);
+  color: var(--paper);
 }
 
 .seg button[aria-pressed="true"] {
-  background: var(--fill-active);
-  color: var(--text);
+  background: var(--fill-2);
+  color: var(--paper);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .stepper button:not(:disabled):hover {
-    background: var(--fill-hover);
+    background: var(--fill-2);
   }
 
   .seg button:hover {
-    color: var(--text);
+    color: var(--paper);
   }
 }
 
@@ -905,11 +1157,12 @@ label.op-row {
 }
 
 .op-count span {
-  color: var(--muted);
+  color: var(--dim);
   font-weight: 400;
 }
 
 .op-section > .btn-wide {
+  justify-content: center;
   margin-top: 8px;
 }
 
@@ -918,6 +1171,10 @@ label.op-row {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin: 8px 0;
+}
+
+.op-buttons .btn {
+  justify-content: center;
 }
 
 .op-sessions {
@@ -935,13 +1192,12 @@ label.op-row {
 .op-session {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   padding: 0;
   border: 0;
-  border-radius: var(--r-media);
   background: none;
-  color: var(--muted);
+  color: var(--dim);
   font-size: 13px;
   cursor: pointer;
 }
@@ -951,18 +1207,17 @@ label.op-row {
   width: 100%;
   aspect-ratio: 2 / 3;
   object-fit: cover;
-  border-radius: var(--r-media);
   outline: 2px solid transparent;
   outline-offset: 2px;
   transition: outline-color 0.15s;
 }
 
 .op-session.armed img {
-  outline-color: var(--accent);
+  outline-color: var(--gold);
 }
 
 .op-session.armed span {
-  color: var(--accent-text);
+  color: var(--gold);
   font-weight: 600;
 }
 
@@ -973,7 +1228,7 @@ label.op-row {
   padding: 6px 0;
   list-style: none;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--dim);
   cursor: pointer;
 }
 
@@ -1000,7 +1255,6 @@ label.op-row {
   overflow: auto;
   margin: 6px 0 0;
   padding: 12px;
-  border-radius: var(--r);
   background: rgba(0, 0, 0, 0.3);
   font-size: 12px;
   line-height: 1.5;
@@ -1008,7 +1262,7 @@ label.op-row {
   user-select: text;
   -webkit-user-select: text;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--line-2) transparent;
 }
 
 .op-toast {
@@ -1016,9 +1270,8 @@ label.op-row {
   left: 50%;
   bottom: 24px;
   padding: 10px 16px;
-  border-radius: var(--r);
-  background: var(--text);
-  color: var(--bg);
+  background: var(--paper);
+  color: var(--booth);
   font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
@@ -1035,49 +1288,205 @@ label.op-row {
 
 /* ---------- portrait: phones and tablets ---------- */
 
+/* Mirror on top, the four frames under it, the count, then the button within
+   reach of the thumb. */
 @media (max-aspect-ratio: 1/1) {
   #booth {
+    --side: clamp(16px, 5vw, 48px);
     --vf-h: min(
-      calc((100vw - 2 * var(--edge-x)) / var(--hole-ar)),
-      calc(var(--vh) - 2 * var(--edge-y) - var(--h-control-lg) - var(--s-4))
+      calc((100vw - 2 * var(--side)) / var(--hole-ar)),
+      calc(var(--vh) * 0.46)
     );
-    grid-template-columns: auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    grid-template-areas: "mark" "window" "seq" "status" "shutter";
+    align-items: start;
+    padding: max(14px, env(safe-area-inset-top)) 0 max(20px, env(safe-area-inset-bottom));
   }
 
-  .mini-wrap {
-    display: none;
+  #booth .panel {
+    display: contents;
   }
 
-  /* Strip on top, actions underneath. */
+  #booth .wordmark {
+    grid-area: mark;
+    padding: 0 var(--side) 14px;
+  }
+
+  .window-area {
+    grid-area: window;
+  }
+
+  #booth .sequence {
+    grid-area: seq;
+    width: min(100% - 2 * var(--side), 560px);
+    margin: 18px auto 0;
+  }
+
+  #booth .status {
+    grid-area: status;
+    align-self: stretch;
+    width: min(100% - 2 * var(--side), 560px);
+    margin: 0 auto;
+  }
+
+  #booth .countdown {
+    font-size: min(30vh, 64vw);
+  }
+
+  #booth .shutter {
+    grid-area: shutter;
+    width: min(100% - 2 * var(--side), 560px);
+    margin: 0 auto;
+  }
+
+  /* Strip on top, hanging from its slot; the controls underneath. The strip
+     takes whatever height the controls leave (100cqh is the strip's area). */
   #review {
-    --strip-h: 54vh;
-    grid-template-columns: minmax(0, 420px);
-    align-content: center;
-    row-gap: var(--s-4);
+    --side: clamp(16px, 5vw, 48px);
+    --strip-h: min(100cqh - 6px, 600px);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    justify-content: stretch;
+    padding: max(14px, env(safe-area-inset-top)) 0 max(20px, env(safe-area-inset-bottom));
   }
 
-  .strip-wrap {
-    justify-self: center;
+  #review .review-panel {
+    display: contents;
+  }
+
+  #review .wordmark {
+    grid-area: 1 / 1;
+    padding: 0 var(--side) 14px;
+  }
+
+  #review .print-area {
+    grid-area: 2 / 1;
+    container-type: size;
+  }
+
+  #review .review-controls {
+    grid-area: 3 / 1;
+    width: min(100% - 2 * var(--side), 480px);
+    margin: 20px auto 0;
   }
 }
 
-@media (max-aspect-ratio: 1/1) and (max-width: 520px) {
-  #review {
-    --strip-h: 48vh;
+/* Phones: the mirror runs edge to edge. */
+@media (max-aspect-ratio: 1/1) and (max-width: 600px) {
+  #booth {
+    --vf-h: min(calc(100vw / var(--hole-ar)), calc(var(--vh) * 0.42));
+  }
+
+  .mark {
+    display: none;
+  }
+}
+
+/* Short portrait screens (small phones): tighter controls, no heading. */
+@media (max-aspect-ratio: 1/1) and (max-height: 700px) {
+  #review .review-copy .lead {
+    display: none;
+  }
+
+  #review .review-copy {
+    margin-bottom: 12px;
+    color: var(--paper);
+  }
+
+  #review .btn {
+    min-height: 48px;
+  }
+
+  #review .btn-gold {
+    min-height: 54px;
+  }
+
+  #review .btn-text {
+    min-height: 44px;
+  }
+
+  #review .actions-main,
+  #review .filter-pane,
+  #review .pair {
+    gap: 8px;
+  }
+}
+
+/* Short landscape screens (phones turned sideways). */
+@media (min-aspect-ratio: 1/1) and (max-height: 520px) {
+  .wordmark {
+    font-size: 13px;
+  }
+
+  /* The panel uses the full height, not just the mirror's. */
+  #booth .panel {
+    height: calc(var(--vh) - 2 * var(--edge));
+  }
+
+  #review .review-copy .lead {
+    display: none;
+  }
+
+  #review .review-copy {
+    margin-bottom: 12px;
+    color: var(--paper);
+  }
+
+  .instruction .lead {
+    font-size: 22px;
+  }
+
+  .instruction {
+    font-size: 14px;
+  }
+
+  .shutter-disc {
+    width: 52px;
+    margin: 6px 0 6px 6px;
+  }
+
+  .shutter-disc::before {
+    inset: -6px;
+  }
+
+  .btn {
+    min-height: 46px;
+  }
+
+  .btn-gold {
+    min-height: 50px;
+  }
+
+  .actions-main,
+  .filter-pane,
+  .pair {
+    gap: 8px;
+  }
+
+  .note-line {
+    margin-bottom: 8px;
+    font-size: 14px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .countdown.pop,
-  .spinner,
+  .strip-wrap.dispensing,
+  .strip-wrap.retracting,
   .op-panel {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
   }
 
   #vf-frame.slide,
-  .switch::after {
+  .switch::after,
+  #video {
     transition: none;
+  }
+
+  #vf-flash.go {
+    animation-duration: 0.25s;
   }
 }
 

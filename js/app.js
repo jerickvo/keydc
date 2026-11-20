@@ -3,7 +3,7 @@ import { CONFIG } from '../config.js';
 import { settings, setSetting, onSettingsChange } from './settings.js';
 import { Camera, classifyError } from './camera.js';
 import { loadFrame } from './frame.js';
-import { cropFromVideo, composeStrip, composeSheet } from './compose.js';
+import { cropFromVideo, composeStrip, composeSheet, drawCover } from './compose.js';
 import * as sound from './sound.js';
 import { initPrint, applyPageSize, printBlob, setPrintImage, lockRemainingMs, startLock, clearLock, addSheets, sheetsSent } from './print.js';
 import { initOperator, openOperator, closeOperator, isOperatorOpen, refreshCameras, renderSessions } from './operator.js';
@@ -24,8 +24,12 @@ const el = {
   countdown: $('#countdown'),
   startBtn: $('#start-btn'),
   progress: $('#progress'),
-  mini: $('#mini'),
-  miniMarker: $('#mini-marker'),
+  sequence: $('#sequence'),
+  instruction: $('#instruction'),
+  vfFlash: $('#vf-flash'),
+  stripWrap: $('#strip-wrap'),
+  printNote: $('#print-note'),
+  printingText: $('#printing-text'),
   review: $('#review'),
   strip: $('#strip'),
   holeButtons: $('#hole-buttons'),
@@ -39,6 +43,8 @@ const el = {
   retakeLabel: $('#retake-btn .label'),
   downloadBtn: $('#download-btn'),
   restartBtn: $('#restart-btn'),
+  reviewLead: $('#review-lead'),
+  reviewSub: $('#review-sub'),
   reviewHint: $('#review-hint'),
   idleHint: $('#idle-hint'),
   msgTitle: $('#msg-title'),
@@ -71,8 +77,11 @@ const state = {
 };
 
 const camera = new Camera(el.video);
-const RETAKE_ICON =
-  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.64-6.36L3 8"/><path d="M3 3v5h5"/></svg>';
+const RETAKE_LABEL = '<span>Retake</span>';
+const FLY_MS = 450; // a photo flying from the mirror into its frame
+const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const word = (n) => WORDS[n] || String(n);
+const reducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
 const MESSAGES = {
   denied: { title: 'Camera blocked', text: 'Allow camera access for this site in Chrome’s site settings, then tap Retry.', button: 'Retry' },
@@ -93,6 +102,7 @@ const pct = (v, total) => `${((v / total) * 100).toFixed(4)}%`;
 let loadingTimer = null;
 
 function showScreen(name) {
+  if (name !== state.screen) clearFlash();
   state.screen = name;
   el.app.dataset.screen = name;
   // Never a dead end: if loading takes long, offer Retry and Settings.
@@ -129,7 +139,8 @@ function applyFrame() {
   if (f.source !== 'file') el.vfFrame.src = f.image.src;
   buildHoleButtons();
   setViewfinderHole(0, false);
-  renderMini();
+  buildSequence();
+  renderSequence();
 }
 
 // Show hole i in the viewfinder: the live video fills the hole (plus bleed)
@@ -155,26 +166,96 @@ function setViewfinderHole(i, slide) {
   el.vfFrame.style.height = pct(f.height, h.h);
 }
 
-function renderMini() {
-  const f = state.frame;
-  if (!f) return;
-  const cssH = el.mini.clientHeight || window.innerHeight * 0.8; // render at the size it is shown
-  const k = Math.min(1, (cssH * Math.min(2, window.devicePixelRatio || 1)) / f.height);
-  composeStrip(f, state.photos, { scale: k, canvas: el.mini, drawPhoto: filteredDrawer(state.filter) });
+// The four frames in the panel: each shows exactly what lands in that hole of
+// the strip (frame artwork included), so the strip visibly fills up.
+function buildSequence() {
+  el.sequence.textContent = '';
+  state.frame.holes.forEach((h, i) => {
+    const li = document.createElement('li');
+    li.className = 'frame';
+    li.dataset.index = String(i);
+    li.setAttribute('aria-label', `Photo ${i + 1}`);
+    li.appendChild(document.createElement('canvas'));
+    el.sequence.appendChild(li);
+  });
 }
 
-function markMini(i) {
+function renderSequence() {
   const f = state.frame;
-  if (!f || i < 0) {
-    el.miniMarker.classList.remove('on');
+  if (!f || !el.sequence.children.length) return;
+  const items = el.sequence.children;
+  const cssW = items[0].clientWidth || 120;
+  const scale = Math.min(1, (cssW * Math.min(2, window.devicePixelRatio || 1)) / f.holes[0].w);
+  const strip = state.photos.some(Boolean)
+    ? composeStrip(f, state.photos, { scale, drawPhoto: filteredDrawer(state.filter) })
+    : null;
+  f.holes.forEach((h, i) => {
+    const li = items[i];
+    const c = li.firstChild;
+    const filled = !!(strip && state.photos[i]);
+    li.classList.toggle('filled', filled);
+    if (!filled) {
+      c.width = 1;
+      c.height = 1;
+      c.getContext('2d').clearRect(0, 0, 1, 1);
+      return;
+    }
+    c.width = Math.max(1, Math.round(h.w * scale));
+    c.height = Math.max(1, Math.round(h.h * scale));
+    c.getContext('2d').drawImage(strip, h.x * scale, h.y * scale, h.w * scale, h.h * scale, 0, 0, c.width, c.height);
+  });
+}
+
+function markSequence(i) {
+  Array.from(el.sequence.children).forEach((li, k) => li.classList.toggle('current', k === i));
+}
+
+function setProgress(main, sub) {
+  el.progress.textContent = main || '';
+  if (sub) {
+    const small = document.createElement('small');
+    small.textContent = sub;
+    el.progress.appendChild(small);
+  }
+}
+
+// The frozen photo shrinks from the mirror into its frame in the panel.
+async function flyToFrame(i, photo, token) {
+  const target = el.sequence.children[i];
+  const from = el.viewfinder.getBoundingClientRect();
+  const to = target ? target.getBoundingClientRect() : null;
+  if (!to || !to.width || !from.width || reducedMotion() || typeof el.app.animate !== 'function') {
+    hideShot();
+    renderSequence();
     return;
   }
-  const h = f.holes[i];
-  el.miniMarker.style.left = pct(h.x, f.width);
-  el.miniMarker.style.top = pct(h.y, f.height);
-  el.miniMarker.style.width = pct(h.w, f.width);
-  el.miniMarker.style.height = pct(h.h, f.height);
-  el.miniMarker.classList.add('on');
+  const c = document.createElement('canvas');
+  c.width = Math.min(720, photo.width);
+  c.height = Math.max(1, Math.round((c.width * photo.height) / photo.width));
+  c.getContext('2d').drawImage(photo, 0, 0, c.width, c.height);
+  c.className = 'flyer';
+  c.style.left = `${from.left}px`;
+  c.style.top = `${from.top}px`;
+  c.style.width = `${from.width}px`;
+  c.style.height = `${from.height}px`;
+  el.app.appendChild(c);
+  hideShot();
+  const anim = c.animate(
+    [
+      { transform: 'translate(0px, 0px) scale(1, 1)' },
+      { transform: `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width}, ${to.height / from.height})` },
+    ],
+    { duration: FLY_MS, easing: 'cubic-bezier(0.3, 0.7, 0.2, 1)', fill: 'forwards' }
+  );
+  const off = token ? token.onCancel(() => anim.cancel()) : null;
+  try {
+    await anim.finished;
+  } catch {
+    /* cancelled */
+  }
+  if (off) off();
+  renderSequence();
+  c.remove();
 }
 
 function buildHoleButtons() {
@@ -190,7 +271,7 @@ function buildHoleButtons() {
     b.style.top = pct(h.y, f.height);
     b.style.width = pct(h.w, f.width);
     b.style.height = pct(h.h, f.height);
-    b.innerHTML = RETAKE_ICON;
+    b.innerHTML = RETAKE_LABEL;
     b.addEventListener('click', () => retake(i));
     el.holeButtons.appendChild(b);
   });
@@ -208,12 +289,21 @@ function showCount(n) {
   }
 }
 
+// Bright in the picture, a softer glow on the rest of the screen.
 function flash() {
-  const f = el.flash;
-  f.classList.remove('go');
-  void f.offsetWidth;
-  f.classList.add('go');
+  for (const f of [el.vfFlash, el.flash]) {
+    f.classList.remove('go');
+    void f.offsetWidth;
+    f.classList.add('go');
+  }
 }
+
+// A finished flash must not stay armed: CSS restarts an animation when its screen
+// is shown again, which would flash the mirror on the way back to the start.
+function clearFlash() {
+  for (const f of [el.vfFlash, el.flash]) f.classList.remove('go');
+}
+for (const f of [el.vfFlash, el.flash]) f.addEventListener('animationend', () => f.classList.remove('go'));
 
 function showShot(photo) {
   const c = el.shot;
@@ -240,7 +330,7 @@ async function startSession() {
   sound.unlockAudio();
   state.photos = new Array(CONFIG.shots).fill(null);
   state.filter = 'none';
-  renderMini();
+  renderSequence();
   const ok = await runShots(state.photos.map((_, i) => i), 'session');
   if (ok) showReview();
   else if (state.screen === 'booth') goIdle();
@@ -258,9 +348,9 @@ async function runShots(indices, mode) {
     for (let k = 0; k < indices.length; k++) {
       const i = indices[k];
       hideShot();
-      setViewfinderHole(i, k > 0);
-      markMini(i);
-      el.progress.textContent = mode === 'retake' ? `Retake photo ${i + 1}` : `Photo ${i + 1} of ${CONFIG.shots}`;
+      setViewfinderHole(i, false);
+      markSequence(i);
+      setProgress(mode === 'retake' ? `Retaking photo ${i + 1}` : `Photo ${i + 1} of ${CONFIG.shots}`, 'Look at the camera');
       setPhase('countdown');
       for (let n = settings.countdown; n >= 1; n--) {
         showCount(n);
@@ -275,8 +365,10 @@ async function runShots(indices, mode) {
       state.photos[i] = photo;
       showShot(photo);
       setPhase('shot');
-      renderMini();
-      await wait(settings.pause * 1000, token);
+      const last = k === indices.length - 1;
+      setProgress(mode === 'retake' ? `Photo ${i + 1} retaken` : `Photo ${i + 1} of ${CONFIG.shots}`, last ? 'All done' : 'Get ready for the next one');
+      await wait(Math.max(300, settings.pause * 1000 - FLY_MS), token);
+      await flyToFrame(i, photo, token);
     }
     return true;
   } catch (e) {
@@ -289,7 +381,7 @@ async function runShots(indices, mode) {
   } finally {
     if (state.seq === token) state.seq = null;
     showCount('');
-    markMini(-1);
+    markSequence(-1);
   }
 }
 
@@ -308,9 +400,9 @@ function goIdle() {
   showScreen('booth');
   setPhase('idle');
   setViewfinderHole(0, false);
-  markMini(-1);
-  el.progress.textContent = '';
-  renderMini();
+  markSequence(-1);
+  setProgress('', '');
+  renderSequence();
   if (state.pendingReload && reloadIfIdle()) return;
   if (state.pendingSwitch && !isOperatorOpen()) {
     state.pendingSwitch = false;
@@ -328,10 +420,34 @@ function showReview() {
   showScreen('review');
   setPhase('idle');
   refreshResult();
+  dispenseStrip();
   hint('');
   state.lastActivity = Date.now();
   el.idleHint.textContent = '';
   updatePrintButton();
+}
+
+// The strip comes out of the slot like a fresh print...
+function dispenseStrip() {
+  const s = el.stripWrap;
+  s.classList.remove('dispensing', 'retracting');
+  void s.offsetWidth;
+  s.classList.add('dispensing');
+}
+
+// ...and goes back in when it is sent to the printer.
+function retractStrip() {
+  return new Promise((resolve) => {
+    if (reducedMotion() || state.screen !== 'review') {
+      resolve();
+      return;
+    }
+    const s = el.stripWrap;
+    s.classList.remove('dispensing');
+    void s.offsetWidth;
+    s.classList.add('retracting');
+    setTimeout(resolve, 460);
+  });
 }
 
 // Re-render the strip and get the print sheet ready in the background, so
@@ -356,11 +472,24 @@ function hint(text, ms = 0) {
   if (ms) hintTimer = setTimeout(() => (el.reviewHint.textContent = ''), ms);
 }
 
+// While choosing a photo to retake, everything but Cancel steps back.
 function setRetakeMode(on) {
   state.retakeMode = !!on;
   el.review.classList.toggle('retake-mode', state.retakeMode);
-  el.retakeLabel.textContent = state.retakeMode ? 'Cancel' : 'Retake';
-  if (state.screen === 'review') hint(state.retakeMode ? 'Tap a photo to retake it' : '');
+  el.retakeLabel.textContent = state.retakeMode ? 'Cancel' : 'Retake a photo';
+  for (const b of [el.printBtn, el.filtersBtn, el.downloadBtn, el.restartBtn]) b.inert = state.retakeMode;
+  renderReviewCopy();
+}
+
+// The line above the buttons says what this screen is for right now.
+function renderReviewCopy() {
+  const [lead, sub] = state.retakeMode
+    ? ['Retake a photo.', 'Tap the photo you want to take again.']
+    : el.review.classList.contains('filters-open')
+      ? ['Filters.', 'Pick a look for all four photos.']
+      : ['Your strip.', 'Print it, or retake any photo first.'];
+  if (el.reviewLead.textContent !== lead) el.reviewLead.textContent = lead;
+  if (el.reviewSub.textContent !== sub) el.reviewSub.textContent = sub;
 }
 
 /* ---------------- filters ---------------- */
@@ -372,13 +501,16 @@ function setFiltersOpen(open) {
     setRetakeMode(false);
     renderFilterList();
   }
+  renderReviewCopy();
 }
 
-// Small strips showing what each filter looks like on these photos.
+// One of the photos in each filter, small enough to sit in a row.
 function renderFilterList() {
   el.filterList.textContent = '';
-  const thumbH = Math.max(140, Math.min(250, window.innerHeight * 0.3));
-  const scale = Math.min(1, (thumbH * Math.min(2, window.devicePixelRatio || 1)) / state.frame.height);
+  const photo = state.photos.find(Boolean);
+  if (!photo) return;
+  const w = Math.round(120 * Math.min(2, window.devicePixelRatio || 1));
+  const h = Math.max(1, Math.round((w * photo.height) / photo.width));
   for (const f of FILTERS) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -386,7 +518,11 @@ function renderFilterList() {
     b.dataset.filter = f.id;
     b.setAttribute('role', 'radio');
     b.setAttribute('aria-checked', String(f.id === state.filter));
-    const c = composeStrip(state.frame, state.photos, { scale, drawPhoto: filteredDrawer(f.id) });
+    const c = makeCanvas(w, h);
+    const cx = c.getContext('2d');
+    cx.imageSmoothingEnabled = true;
+    cx.imageSmoothingQuality = 'high';
+    (filteredDrawer(f.id) || drawCover)(cx, photo, 0, 0, w, h);
     const label = document.createElement('span');
     label.textContent = f.label;
     b.append(c, label);
@@ -446,6 +582,7 @@ async function printNow() {
   try {
     const prep = await (state.prep || prepareSheet());
     storeSheet(prep); // in the background; never delays printing
+    await retractStrip();
     await printBlob(prep.sheetBlob); // returns when the print dialog closes
     addSheets(1);
     log.info(`print: sheet ${sheetsSent()}`);
@@ -453,6 +590,7 @@ async function printNow() {
   } catch (e) {
     log.error('print failed', e);
     clearLock();
+    if (state.screen === 'review') dispenseStrip();
     hint('Could not print – try again', 5000);
   } finally {
     state.printing = false;
@@ -499,6 +637,10 @@ async function reprint(session) {
 let printingTimer = null;
 function showPrinting() {
   setRetakeMode(false);
+  el.printingText.textContent =
+    settings.layout === 'single'
+      ? 'Your strip will be ready in about a minute.'
+      : 'Your strips will be ready in about a minute. There are two on the sheet, so cut it down the middle.';
   showScreen('printing');
   clearTimeout(printingTimer);
   printingTimer = setTimeout(leavePrinting, CONFIG.printingScreenMs);
@@ -772,8 +914,16 @@ function bindUI() {
   el.printBtn.addEventListener('click', printNow);
   el.printing.addEventListener('click', leavePrinting);
   el.retakeBtn.addEventListener('click', () => setRetakeMode(!state.retakeMode));
-  el.filtersBtn.addEventListener('click', () => setFiltersOpen(true));
-  el.filtersDone.addEventListener('click', () => setFiltersOpen(false));
+  // Keyboard focus follows the pane that is showing.
+  el.filtersBtn.addEventListener('click', () => {
+    setFiltersOpen(true);
+    const on = el.filterList.querySelector('[aria-checked="true"]');
+    if (on) on.focus({ preventScroll: true });
+  });
+  el.filtersDone.addEventListener('click', () => {
+    setFiltersOpen(false);
+    el.filtersBtn.focus({ preventScroll: true });
+  });
   el.downloadBtn.addEventListener('click', downloadFiles);
   el.restartBtn.addEventListener('click', goIdle);
   el.msgRetry.addEventListener('click', () => connectCamera({ strict: false }));
@@ -820,7 +970,7 @@ function bindUI() {
     if (state.screen === 'review') updatePrintButton();
   }, 500);
 
-  window.addEventListener('resize', debounce(renderMini, 200));
+  window.addEventListener('resize', debounce(renderSequence, 200));
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       keepAwake();
@@ -846,7 +996,20 @@ async function watchPermission() {
   }
 }
 
+// Copy that depends on the settings (how many seconds, how many strips).
+function renderCopy() {
+  const n = CONFIG.shots;
+  const lead = document.createElement('span');
+  lead.className = 'lead';
+  lead.textContent = `${word(n).charAt(0).toUpperCase()}${word(n).slice(1)} photos.`;
+  el.instruction.textContent = '';
+  el.instruction.append(lead, ` A ${word(settings.countdown)}-second countdown before each one. Look at the camera, not the screen.`);
+  el.printNote.textContent =
+    settings.layout === 'single' ? 'Prints one copy in about a minute.' : 'Prints two copies in about a minute.';
+}
+
 function applySettings(key) {
+  renderCopy();
   el.video.classList.toggle('mirror', settings.mirrorPreview);
   el.review.classList.toggle('no-filters', !settings.filters);
   if (!settings.filters) {

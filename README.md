@@ -13,7 +13,8 @@ DJI Osmo Pocket 3 (USB webcam mode), puts them into `frame.png`, and prints a
 
 | File | What it is |
 | --- | --- |
-| `index.html`, `styles.css` | The page and its look |
+| `index.html`, `styles.css` | The page and its look (see `DESIGN.md`) |
+| `fonts/` | Archivo, self-hosted so the booth looks the same offline (SIL Open Font License) |
 | `config.js` | Defaults, plus the fallback hole positions for the frame |
 | `frame.png` | The strip frame (600×1800 RGBA, transparent holes) |
 | `js/` | App code: camera, frame and hole detection, composing, printing, operator menu, filters |
@@ -84,7 +85,7 @@ To open it, hold the **top-left corner for 2 seconds**, or press **o**. Close it
 - [ ] Optional: install it (Chrome menu → **Cast, save and share → Install page as app**,
       or the install icon in the address bar). It then opens in its own window. Use
       **Full screen** in the operator menu, or the ChromeOS full-screen key.
-- [ ] Tap **Download** once on a review screen. If Chrome asks to download multiple files, choose **Allow**.
+- [ ] Tap **Save a copy** once on a review screen. If Chrome asks to download multiple files, choose **Allow**.
 - [ ] If the Chromebook is school-managed, its policies can block USB cameras, adding
       printers or installing apps. Check all of that tonight.
 - [ ] ChromeOS **Settings → Device → Power**: while charging, set it to keep the display on.
@@ -139,8 +140,9 @@ To open it, hold the **top-left corner for 2 seconds**, or press **o**. Close it
 
 ### During the event
 
-- Guests: **Start** (or Space / Enter) → 4 photos → **Print**, **Retake** (tap one photo),
-  **Filters**, **Download**, or **Start over**. The review screen resets after 90 s of no activity.
+- Guests: **Take photos** (or Space / Enter) → 4 photos → **Print**, **Retake a photo** (then tap
+  the photo), **Filters**, **Save a copy**, or **Start over**. The review screen resets after 90 s
+  of no activity.
 - After Print, the button stays locked for 60 s while the SELPHY prints (about a minute per sheet).
 - A print failed or jammed? Operator menu → **Saved sheets** → tap the sheet twice to reprint it.
 - The counter shows sheets sent and sheets left in the 108-sheet pack. Use **−1** if a
@@ -203,7 +205,9 @@ What they check:
 - **Offline:** the booth loads and prints with the server stopped and the network off.
   A new version replaces the old cache, and Chrome reports the app installable.
 - **Filters:** each filter works, None restores the originals exactly, and the fallback matches `ctx.filter`.
-- **Layout:** every screen fits without scrolling from 1024×768 to 1920×1080.
+- **Layout:** every screen fits without scrolling, and the parts of each screen never overlap,
+  from 320×568 phones to 1920×1080, upright and sideways. The flash doesn't fire again when
+  the start screen comes back.
 
 What they can't check is the real hardware: the Pocket 3, the SELPHY and Chrome's print
 dialog. That's what the checklist above is for.
