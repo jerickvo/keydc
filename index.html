@@ -33,14 +33,10 @@
             <img id="vf-frame" src="frame.png" alt="" draggable="false">
             <div id="vf-flash" aria-hidden="true"></div>
           </div>
-          <span class="mark tl" aria-hidden="true"></span>
-          <span class="mark tr" aria-hidden="true"></span>
-          <span class="mark bl" aria-hidden="true"></span>
-          <span class="mark br" aria-hidden="true"></span>
           <div id="loading" class="window-note" aria-live="polite">
             <p id="loading-text">Starting camera…</p>
             <div id="loading-actions" class="note-actions" hidden>
-              <button id="loading-retry" class="btn btn-line" type="button">Retry</button>
+              <button id="loading-retry" class="btn btn-quiet" type="button">Retry</button>
               <button id="loading-settings" class="btn-text" type="button">Settings</button>
             </div>
           </div>
@@ -48,24 +44,20 @@
       </div>
 
       <div class="panel">
-        <p class="wordmark"><b>STKEYCLUB</b> Photo booth</p>
-        <ol id="sequence" class="sequence" aria-label="Your four photos"></ol>
+        <p class="wordmark">STKEYCLUB</p>
         <div class="status">
-          <p id="instruction" class="instruction"><span class="lead">Four photos.</span> A three-second countdown before each one. Look at the camera, not the screen.</p>
+          <p id="instruction" class="instruction"><span class="lead">Four photos</span> Look at the camera, not the screen.</p>
+          <ol id="sequence" class="sequence" aria-label="Your four photos"></ol>
           <div id="countdown" class="countdown" aria-live="assertive"></div>
           <p id="progress" class="progress" aria-live="polite"></p>
         </div>
-        <button id="start-btn" class="shutter" type="button">
-          <span class="shutter-disc" aria-hidden="true"></span>
-          <span class="shutter-label">Take photos</span>
-        </button>
+        <button id="start-btn" class="btn btn-gold btn-primary" type="button">Take photos</button>
       </div>
     </section>
 
-    <!-- The finished strip, fresh out of the slot. -->
+    <!-- The finished strip, fed down from the top of the screen like a fresh print. -->
     <section id="review" class="screen">
       <div class="print-area">
-        <div class="slot" aria-hidden="true"></div>
         <div class="dispense">
           <div class="strip-wrap" id="strip-wrap">
             <canvas id="strip" aria-label="Your photo strip"></canvas>
@@ -75,19 +67,20 @@
       </div>
 
       <div class="panel review-panel">
-        <p class="wordmark"><b>STKEYCLUB</b> Photo booth</p>
         <div class="review-controls">
-          <p class="instruction review-copy" aria-live="polite"><span id="review-lead" class="lead">Your strip.</span> <span id="review-sub">Print it, or retake any photo first.</span></p>
-          <p class="note-line">
-            <span id="print-note" class="print-note">Prints two copies in about a minute.</span>
-            <span id="review-hint" class="hint" aria-live="polite"></span>
-            <span id="idle-hint" class="hint idle-hint" aria-live="polite"></span>
-          </p>
+          <div class="instruction review-copy">
+            <p id="review-lead" class="lead" aria-live="polite">Your strip</p>
+            <p class="note-line">
+              <span id="review-sub" aria-live="polite">Prints two copies in about a minute.</span>
+              <span id="review-hint" class="hint" aria-live="polite"></span>
+              <span id="idle-hint" class="hint idle-hint" aria-live="polite"></span>
+            </p>
+          </div>
           <div class="actions-main">
-            <button id="print-btn" class="btn btn-gold" type="button"><span class="label">Print</span></button>
+            <button id="print-btn" class="btn btn-gold btn-primary" type="button"><span class="label">Print</span></button>
             <div class="pair">
-              <button id="retake-btn" class="btn btn-line" type="button"><span class="label">Retake a photo</span></button>
-              <button id="filters-btn" class="btn btn-line" type="button">Filters</button>
+              <button id="retake-btn" class="btn btn-quiet" type="button"><span class="label">Retake a photo</span></button>
+              <button id="filters-btn" class="btn btn-quiet" type="button">Filters</button>
             </div>
             <div class="pair">
               <button id="download-btn" class="btn-text" type="button">Save a copy</button>
@@ -96,7 +89,7 @@
           </div>
           <div class="filter-pane">
             <div id="filter-list" class="filter-list" role="radiogroup" aria-label="Filters"></div>
-            <button id="filters-done" class="btn btn-line" type="button">Done</button>
+            <button id="filters-done" class="btn btn-quiet" type="button">Done</button>
           </div>
         </div>
       </div>
@@ -127,7 +120,7 @@
       <aside class="op-panel" role="dialog" aria-modal="true" aria-labelledby="op-title" tabindex="-1">
         <header class="op-head">
           <h2 id="op-title">Operator</h2>
-          <button id="op-close" class="btn btn-line btn-small" type="button">Done</button>
+          <button id="op-close" class="btn btn-quiet btn-small" type="button">Done</button>
         </header>
         <div class="op-body">
           <section class="op-section">
@@ -157,25 +150,25 @@
               <span>Sheets sent</span>
               <div class="op-inline">
                 <span class="op-count"><b id="op-sheets">0</b> <span id="op-pack">/ 108</span></span>
-                <button id="op-sheets-minus" class="btn btn-line btn-small" type="button" aria-label="Subtract one sheet">−1</button>
-                <button id="op-sheets-reset" class="btn btn-line btn-small" type="button">Reset</button>
+                <button id="op-sheets-minus" class="btn btn-quiet btn-small" type="button" aria-label="Subtract one sheet">−1</button>
+                <button id="op-sheets-reset" class="btn btn-quiet btn-small" type="button">Reset</button>
               </div>
             </div>
-            <button id="op-test-print" class="btn btn-line btn-small btn-wide" type="button">Test print</button>
+            <button id="op-test-print" class="btn btn-quiet btn-small btn-wide" type="button">Test print</button>
           </section>
 
           <section class="op-section">
             <h3>Saved sheets</h3>
             <div id="op-sessions" class="op-sessions"></div>
-            <button id="op-clear" class="btn btn-line btn-small btn-wide btn-danger" type="button">Clear all</button>
+            <button id="op-clear" class="btn btn-quiet btn-small btn-wide btn-danger" type="button">Clear all</button>
           </section>
 
           <section class="op-section">
             <h3>Booth</h3>
             <div class="op-row"><span>Idle reset</span><div class="stepper" data-setting="idleReset" data-unit=" s"></div></div>
             <div class="op-buttons">
-              <button id="op-fullscreen" class="btn btn-line btn-small" type="button">Full screen</button>
-              <button id="op-reload" class="btn btn-line btn-small" type="button">Reload</button>
+              <button id="op-fullscreen" class="btn btn-quiet btn-small" type="button">Full screen</button>
+              <button id="op-reload" class="btn btn-quiet btn-small" type="button">Reload</button>
             </div>
             <p id="op-info" class="op-note"></p>
             <details class="op-log"><summary>Log</summary><pre id="op-log"></pre></details>

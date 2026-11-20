@@ -25,7 +25,6 @@
   --gold: #f2b53b;
   --gold-press: #d99f2a;
   --on-gold: #1c1711;
-  --slot: #0a0908;
   --empty: #100f0d;
 
   --font: "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -123,30 +122,28 @@ select {
 
 /* ---------- shared type ---------- */
 
+/* A maker's mark, like the name on the front of a camera. */
 .wordmark {
   margin: 0;
-  font-size: 15px;
-  line-height: 1.2;
+  font-size: 13px;
+  font-weight: 700;
+  font-stretch: 85%;
+  line-height: 1;
+  letter-spacing: 0.18em;
   color: var(--dim);
   white-space: nowrap;
 }
 
-.wordmark b {
-  margin-right: 0.35em;
-  font-weight: 800;
-  font-stretch: 80%;
-  letter-spacing: 0.06em;
-  color: var(--paper);
-}
-
 /* ---------- buttons ---------- */
 
+/* Buttons are solid keys with centred labels, in three weights: the gold one
+   (what to do next), quiet ones, and plain text for the least important. */
 .btn {
   appearance: none;
   -webkit-appearance: none;
   display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   min-height: 56px;
   padding: 0 20px;
   border: 0;
@@ -156,19 +153,16 @@ select {
   font-size: var(--t-control);
   font-weight: 600;
   line-height: 1;
-  text-align: left;
+  text-align: center;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+  transition: background-color 0.15s, color 0.15s;
 }
 
-/* The one gold button on a screen: the thing the booth wants you to do next. */
 .btn-gold {
-  min-height: 64px;
   background: var(--gold);
   color: var(--on-gold);
-  font-size: clamp(18px, 2.7vh, 22px);
   font-weight: 700;
 }
 
@@ -176,11 +170,18 @@ select {
   background: var(--gold-press);
 }
 
-.btn-line {
-  box-shadow: inset 0 0 0 1.5px var(--line-2);
+/* The big one: Take photos, Print. */
+.btn-primary {
+  width: 100%;
+  min-height: clamp(64px, 10.5vh, 92px);
+  font-size: clamp(19px, 2.8vh, 24px);
 }
 
-.btn-line:active {
+.btn-quiet {
+  background: var(--fill);
+}
+
+.btn-quiet:active {
   background: var(--fill-2);
 }
 
@@ -188,17 +189,12 @@ select {
   appearance: none;
   -webkit-appearance: none;
   min-height: 48px;
-  padding: 0;
+  padding: 0 4px;
   border: 0;
   background: none;
   color: var(--dim);
   font-size: var(--t-control);
   font-weight: 500;
-  text-align: left;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-decoration-color: var(--line-2);
-  text-underline-offset: 5px;
   cursor: pointer;
   transition: color 0.15s;
 }
@@ -227,8 +223,8 @@ select {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .btn-line:hover {
-    background: var(--fill);
+  .btn-quiet:hover {
+    background: var(--fill-2);
   }
 
   .btn-gold:hover {
@@ -240,10 +236,11 @@ select {
   }
 }
 
+/* Not available yet: hollow, so it can't be mistaken for a quiet key. */
 .btn:disabled,
 .btn:disabled:hover {
-  background: var(--fill);
-  box-shadow: none;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
   color: var(--dim);
   cursor: default;
 }
@@ -339,20 +336,6 @@ select {
   100% { opacity: 0; }
 }
 
-/* Viewfinder framing marks just outside the corners of the picture. */
-.mark {
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  border: 0 solid var(--line-2);
-  pointer-events: none;
-}
-
-.mark.tl { top: -9px; left: -9px; border-top-width: 1.5px; border-left-width: 1.5px; }
-.mark.tr { top: -9px; right: -9px; border-top-width: 1.5px; border-right-width: 1.5px; }
-.mark.bl { bottom: -9px; left: -9px; border-bottom-width: 1.5px; border-left-width: 1.5px; }
-.mark.br { bottom: -9px; right: -9px; border-bottom-width: 1.5px; border-right-width: 1.5px; }
-
 /* Camera starting: the note sits in the empty window. */
 .window-note {
   position: absolute;
@@ -388,7 +371,8 @@ select {
   display: none;
 }
 
-/* The panel: wordmark, the four frames, the count, the button. */
+/* The panel: the mark on top, one block at the bottom. The four frames only
+   appear while the photos are being taken. */
 .panel {
   display: flex;
   flex-direction: column;
@@ -397,12 +381,16 @@ select {
 }
 
 .sequence {
-  display: grid;
+  display: none;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
-  margin: clamp(14px, 3vh, 28px) 0 0;
+  margin: 0 0 clamp(20px, 4.5vh, 40px);
   padding: 0;
   list-style: none;
+}
+
+#booth:not([data-phase="idle"]) .sequence {
+  display: grid;
 }
 
 .frame {
@@ -433,7 +421,7 @@ select {
   flex-direction: column;
   justify-content: flex-end;
   min-height: 0;
-  padding-bottom: clamp(18px, 4vh, 40px);
+  padding-bottom: clamp(20px, 4vh, 36px);
 }
 
 #booth:not([data-phase="idle"]) .status {
@@ -453,7 +441,7 @@ select {
 .instruction .lead {
   display: block;
   margin-bottom: 8px;
-  font-size: clamp(26px, 4.6vh, 40px);
+  font-size: clamp(28px, 5vh, 44px);
   font-weight: 700;
   font-stretch: 85%;
   line-height: 1.05;
@@ -507,68 +495,15 @@ select {
   display: block;
 }
 
-/* The shutter: a real, round button with its label beside it. */
-.shutter {
-  appearance: none;
-  -webkit-appearance: none;
-  display: flex;
-  align-items: center;
-  gap: clamp(16px, 2vh, 22px);
-  width: 100%;
-  padding: 10px 0 0;
-  border: 0;
-  background: none;
-  color: var(--paper);
-  text-align: left;
-  cursor: pointer;
-}
-
-.shutter-disc {
-  position: relative;
-  flex: none;
-  margin: 8px 0 8px 8px;
-  width: clamp(56px, 11vh, 92px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: var(--gold);
-  transition: transform 0.09s ease-out, background-color 0.15s;
-}
-
-.shutter-disc::before {
-  content: "";
-  position: absolute;
-  inset: -8px;
-  border: 1.5px solid var(--line-2);
-  border-radius: 50%;
-}
-
-.shutter:active .shutter-disc {
-  transform: scale(0.93);
-  background: var(--gold-press);
-}
-
-.shutter-label {
-  font-size: clamp(18px, 2.9vh, 24px);
-  font-weight: 700;
-  line-height: 1.1;
-  white-space: nowrap;
-}
-
-.shutter:focus-visible {
-  outline: none;
-}
-
-.shutter:focus-visible .shutter-disc::before {
-  border-color: var(--paper);
-  border-width: 2px;
-}
-
-#booth:not([data-phase="idle"]) .shutter {
+#booth:not([data-phase="idle"]) #start-btn {
   display: none;
 }
 
-#app[data-screen="loading"] .shutter {
-  opacity: 0.35;
+/* While the camera starts, the button is there but not ready. */
+#app[data-screen="loading"] #start-btn {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--dim);
   pointer-events: none;
 }
 
@@ -598,10 +533,11 @@ select {
   pointer-events: none;
 }
 
-/* ---------- review: the strip comes out of the slot ---------- */
+/* ---------- review: the strip, fresh out of the printer ---------- */
 
 #review {
-  --strip-h: calc(var(--vh) - 2 * var(--edge) - 6px);
+  --top: var(--edge);
+  --strip-h: calc(var(--vh) - 2 * var(--edge));
   --panel-w: clamp(260px, 30vw, 400px);
   grid-template-columns: auto var(--panel-w);
   justify-content: center;
@@ -616,21 +552,10 @@ select {
   min-width: 0;
 }
 
-.slot {
-  position: relative;
-  z-index: 2;
-  flex: none;
-  width: calc(var(--strip-h) / 3 + 36px);
-  height: 12px;
-  border-radius: 6px;
-  background: var(--slot);
-  box-shadow: inset 0 3px 4px rgba(0, 0, 0, 0.9);
-}
-
-/* Clips the strip at the slot so it seems to come out of it. */
+/* Clips at the top edge of the screen, so the strip is fed in from above. */
 .dispense {
-  margin: -6px -48px -48px;
-  padding: 0 48px 48px;
+  margin: calc(-1 * var(--top)) -48px -48px;
+  padding: var(--top) 48px 48px;
   overflow: hidden;
 }
 
@@ -650,11 +575,11 @@ select {
 }
 
 @keyframes dispense {
-  from { transform: translateY(calc(-100% - 8px)); }
+  from { transform: translateY(calc(-100% - var(--top) - 4px)); }
 }
 
 @keyframes retract {
-  to { transform: translateY(calc(-100% - 8px)); }
+  to { transform: translateY(calc(-100% - var(--top) - 4px)); }
 }
 
 #strip {
@@ -720,19 +645,18 @@ select {
 
 .review-copy {
   grid-row: 1;
-  margin-bottom: clamp(16px, 3.4vh, 32px);
+  margin-bottom: clamp(20px, 4vh, 36px);
 }
 
-/* One quiet line above the buttons: what Print gives you, or a passing message
-   ("Saved to Downloads", "Starting over in 8…") in its place. */
+.review-copy .lead {
+  margin: 0 0 8px;
+}
+
+/* One line under the heading. A passing message ("Saved to Downloads",
+   "Starting over in 8…") takes its place for a moment. */
 .note-line {
-  grid-row: 2;
   display: grid;
-  min-height: 1.45em;
-  margin: 0 0 10px;
-  font-size: 15px;
-  line-height: 1.45;
-  color: var(--dim);
+  margin: 0;
 }
 
 .note-line > * {
@@ -740,10 +664,8 @@ select {
   min-width: 0;
 }
 
-.note-line:has(.hint:not(:empty)) .print-note,
-.note-line:has(.idle-hint:not(:empty)) #review-hint,
-#review.filters-open .print-note,
-#review.retake-mode .print-note {
+.note-line:has(.hint:not(:empty)) #review-sub,
+.note-line:has(.idle-hint:not(:empty)) #review-hint {
   visibility: hidden;
 }
 
@@ -759,13 +681,16 @@ select {
   gap: 12px;
 }
 
-.actions-main .btn,
-.actions-main .btn-text {
-  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s, opacity 0.2s;
+#review.retake-mode .actions-main [inert] {
+  visibility: hidden;
 }
 
-#review .actions-main [inert] {
-  opacity: 0.25;
+#review.retake-mode #filters-btn {
+  display: none;
+}
+
+#review.retake-mode #retake-btn {
+  grid-column: 1 / -1;
 }
 
 .review-panel .btn {
@@ -795,42 +720,43 @@ select {
   visibility: visible;
 }
 
+.filter-pane {
+  container-type: inline-size;
+}
+
 .filter-list {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
+}
+
+@container (max-width: 379px) {
+  .filter-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .filter-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  min-width: 0;
-  padding: 0;
+  min-height: 52px;
+  padding: 0 4px;
   border: 0;
-  background: none;
-  color: var(--dim);
-  font-size: 14px;
+  border-radius: 2px;
+  background: var(--fill);
+  color: var(--paper);
+  font-size: 15px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
 }
 
-.filter-item canvas {
-  display: block;
-  width: 100%;
-  height: auto;
-  outline: 2px solid transparent;
-  outline-offset: 3px;
-  transition: outline-color 0.15s;
+.filter-item:active {
+  background: var(--fill-2);
 }
 
 .filter-item[aria-checked="true"] {
-  color: var(--paper);
-}
-
-.filter-item[aria-checked="true"] canvas {
-  outline-color: var(--gold);
+  background: var(--paper);
+  color: var(--booth);
 }
 
 /* ---------- printing, messages ---------- */
@@ -1288,8 +1214,8 @@ label.op-row {
 
 /* ---------- portrait: phones and tablets ---------- */
 
-/* Mirror on top, the four frames under it, the count, then the button within
-   reach of the thumb. */
+/* The picture on top; the words and the button at the bottom, within reach
+   of the thumb. */
 @media (max-aspect-ratio: 1/1) {
   #booth {
     --side: clamp(16px, 5vw, 48px);
@@ -1298,10 +1224,10 @@ label.op-row {
       calc(var(--vh) * 0.46)
     );
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
-    grid-template-areas: "mark" "window" "seq" "status" "shutter";
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas: "mark" "window" "status" "button";
     align-items: start;
-    padding: max(14px, env(safe-area-inset-top)) 0 max(20px, env(safe-area-inset-bottom));
+    padding: max(16px, env(safe-area-inset-top)) 0 max(20px, env(safe-area-inset-bottom));
   }
 
   #booth .panel {
@@ -1310,17 +1236,11 @@ label.op-row {
 
   #booth .wordmark {
     grid-area: mark;
-    padding: 0 var(--side) 14px;
+    padding: 0 var(--side) 16px;
   }
 
   .window-area {
     grid-area: window;
-  }
-
-  #booth .sequence {
-    grid-area: seq;
-    width: min(100% - 2 * var(--side), 560px);
-    margin: 18px auto 0;
   }
 
   #booth .status {
@@ -1328,58 +1248,51 @@ label.op-row {
     align-self: stretch;
     width: min(100% - 2 * var(--side), 560px);
     margin: 0 auto;
+    padding-top: 20px;
   }
 
   #booth .countdown {
     font-size: min(30vh, 64vw);
   }
 
-  #booth .shutter {
-    grid-area: shutter;
+  #booth #start-btn {
+    grid-area: button;
     width: min(100% - 2 * var(--side), 560px);
     margin: 0 auto;
   }
 
-  /* Strip on top, hanging from its slot; the controls underneath. The strip
-     takes whatever height the controls leave (100cqh is the strip's area). */
+  /* The strip on top, the controls underneath. The strip takes whatever height
+     the controls leave (100cqh is the strip's area). */
   #review {
     --side: clamp(16px, 5vw, 48px);
-    --strip-h: min(100cqh - 6px, 600px);
+    --top: max(16px, env(safe-area-inset-top));
+    --strip-h: min(100cqh, 600px);
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto;
     justify-content: stretch;
-    padding: max(14px, env(safe-area-inset-top)) 0 max(20px, env(safe-area-inset-bottom));
+    padding: var(--top) 0 max(20px, env(safe-area-inset-bottom));
   }
 
   #review .review-panel {
     display: contents;
   }
 
-  #review .wordmark {
-    grid-area: 1 / 1;
-    padding: 0 var(--side) 14px;
-  }
-
   #review .print-area {
-    grid-area: 2 / 1;
+    grid-area: 1 / 1;
     container-type: size;
   }
 
   #review .review-controls {
-    grid-area: 3 / 1;
+    grid-area: 2 / 1;
     width: min(100% - 2 * var(--side), 480px);
-    margin: 20px auto 0;
+    margin: 24px auto 0;
   }
 }
 
-/* Phones: the mirror runs edge to edge. */
+/* Phones: the picture runs edge to edge. */
 @media (max-aspect-ratio: 1/1) and (max-width: 600px) {
   #booth {
-    --vf-h: min(calc(100vw / var(--hole-ar)), calc(var(--vh) * 0.42));
-  }
-
-  .mark {
-    display: none;
+    --vf-h: min(calc(100vw / var(--hole-ar)), calc(var(--vh) * 0.46));
   }
 }
 
@@ -1398,8 +1311,8 @@ label.op-row {
     min-height: 48px;
   }
 
-  #review .btn-gold {
-    min-height: 54px;
+  #review .btn-primary {
+    min-height: 56px;
   }
 
   #review .btn-text {
@@ -1415,10 +1328,6 @@ label.op-row {
 
 /* Short landscape screens (phones turned sideways). */
 @media (min-aspect-ratio: 1/1) and (max-height: 520px) {
-  .wordmark {
-    font-size: 13px;
-  }
-
   /* The panel uses the full height, not just the mirror's. */
   #booth .panel {
     height: calc(var(--vh) - 2 * var(--edge));
@@ -1441,21 +1350,21 @@ label.op-row {
     font-size: 14px;
   }
 
-  .shutter-disc {
-    width: 52px;
-    margin: 6px 0 6px 6px;
-  }
-
-  .shutter-disc::before {
-    inset: -6px;
-  }
-
   .btn {
     min-height: 46px;
   }
 
-  .btn-gold {
-    min-height: 50px;
+  .btn-primary {
+    min-height: 54px;
+    font-size: 18px;
+  }
+
+  .status {
+    padding-bottom: 14px;
+  }
+
+  .sequence {
+    margin-bottom: 14px;
   }
 
   .actions-main,
@@ -1464,10 +1373,6 @@ label.op-row {
     gap: 8px;
   }
 
-  .note-line {
-    margin-bottom: 8px;
-    font-size: 14px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

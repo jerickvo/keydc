@@ -971,7 +971,7 @@ test('filters: each filter changes the strip; None restores the originals exactl
   const base = await sample();
   await page.click('#filters-btn');
   await page.waitForSelector('.filter-item');
-  assert.equal(await page.$$eval('.filter-item canvas', (cs) => cs.length), 5, 'five filter thumbnails');
+  assert.deepEqual(await page.$$eval('.filter-item', (bs) => bs.map((b) => b.textContent)), ['None', 'B&W', 'Warm', 'Cool', 'Vintage'], 'five filters');
   await page.waitForTimeout(150);
   await shot(page, '13-filters');
   const res = {};
@@ -1105,12 +1105,11 @@ test('layout: every screen fits, nothing overlaps, at kiosk, tablet and phone si
     await page.waitForTimeout(150);
     await check(
       `start ${w}x${h}`,
-      ['#viewfinder', '#sequence', '#instruction', '#start-btn'],
+      ['#viewfinder', '#instruction', '#start-btn'],
       [
-        ['#booth .wordmark', '#sequence'],
-        ['#sequence', '#instruction'],
+        ['#booth .wordmark', '#instruction'],
+        ['#booth .wordmark', '#viewfinder'],
         ['#instruction', '#start-btn'],
-        ['#viewfinder', '#sequence'],
         ['#viewfinder', '#instruction'],
         ['#viewfinder', '#start-btn'],
       ]
@@ -1121,14 +1120,17 @@ test('layout: every screen fits, nothing overlaps, at kiosk, tablet and phone si
     await page.waitForFunction(() => !document.querySelector('.strip-wrap').getAnimations().some((a) => a.playState === 'running'));
     const reviewInside = ['.strip-wrap', '#print-btn', '#retake-btn', '#filters-btn', '#download-btn', '#restart-btn'];
     const reviewApart = [
-      ['#review .wordmark', '.strip-wrap'],
       ['.strip-wrap', '.review-controls'],
-      ['.review-copy', '.note-line'],
-      ['.note-line', '#print-btn'],
+      ['.review-copy', '#print-btn'],
     ];
     await check(`review ${w}x${h}`, reviewInside, reviewApart);
     await page.click('#retake-btn');
-    await check(`retake ${w}x${h}`, reviewInside, reviewApart);
+    await check(`retake ${w}x${h}`, ['.strip-wrap', '#retake-btn', '.hole-btn'], reviewApart);
+    assert.deepEqual(
+      await page.$$eval('#print-btn, #filters-btn, #download-btn, #restart-btn', (bs) => bs.filter((b) => b.checkVisibility({ visibilityProperty: true })).length),
+      0,
+      `retake ${w}x${h}: only Cancel is left`
+    );
     await page.click('#retake-btn');
     await page.click('#filters-btn');
     await check(`filters ${w}x${h}`, ['.strip-wrap', '.filter-list', '#filters-done'], [

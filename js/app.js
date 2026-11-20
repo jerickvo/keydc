@@ -3,7 +3,7 @@ import { CONFIG } from '../config.js';
 import { settings, setSetting, onSettingsChange } from './settings.js';
 import { Camera, classifyError } from './camera.js';
 import { loadFrame } from './frame.js';
-import { cropFromVideo, composeStrip, composeSheet, drawCover } from './compose.js';
+import { cropFromVideo, composeStrip, composeSheet } from './compose.js';
 import * as sound from './sound.js';
 import { initPrint, applyPageSize, printBlob, setPrintImage, lockRemainingMs, startLock, clearLock, addSheets, sheetsSent } from './print.js';
 import { initOperator, openOperator, closeOperator, isOperatorOpen, refreshCameras, renderSessions } from './operator.js';
@@ -28,7 +28,6 @@ const el = {
   instruction: $('#instruction'),
   vfFlash: $('#vf-flash'),
   stripWrap: $('#strip-wrap'),
-  printNote: $('#print-note'),
   printingText: $('#printing-text'),
   review: $('#review'),
   strip: $('#strip'),
@@ -484,10 +483,10 @@ function setRetakeMode(on) {
 // The line above the buttons says what this screen is for right now.
 function renderReviewCopy() {
   const [lead, sub] = state.retakeMode
-    ? ['Retake a photo.', 'Tap the photo you want to take again.']
+    ? ['Retake a photo', 'Tap the photo you want to take again.']
     : el.review.classList.contains('filters-open')
-      ? ['Filters.', 'Pick a look for all four photos.']
-      : ['Your strip.', 'Print it, or retake any photo first.'];
+      ? ['Filters', 'Pick a look for all four photos.']
+      : ['Your strip', settings.layout === 'single' ? 'Prints in about a minute.' : 'Prints two copies in about a minute.'];
   if (el.reviewLead.textContent !== lead) el.reviewLead.textContent = lead;
   if (el.reviewSub.textContent !== sub) el.reviewSub.textContent = sub;
 }
@@ -504,13 +503,9 @@ function setFiltersOpen(open) {
   renderReviewCopy();
 }
 
-// One of the photos in each filter, small enough to sit in a row.
+// The strip itself is the preview, so the choices are just their names.
 function renderFilterList() {
   el.filterList.textContent = '';
-  const photo = state.photos.find(Boolean);
-  if (!photo) return;
-  const w = Math.round(120 * Math.min(2, window.devicePixelRatio || 1));
-  const h = Math.max(1, Math.round((w * photo.height) / photo.width));
   for (const f of FILTERS) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -518,14 +513,7 @@ function renderFilterList() {
     b.dataset.filter = f.id;
     b.setAttribute('role', 'radio');
     b.setAttribute('aria-checked', String(f.id === state.filter));
-    const c = makeCanvas(w, h);
-    const cx = c.getContext('2d');
-    cx.imageSmoothingEnabled = true;
-    cx.imageSmoothingQuality = 'high';
-    (filteredDrawer(f.id) || drawCover)(cx, photo, 0, 0, w, h);
-    const label = document.createElement('span');
-    label.textContent = f.label;
-    b.append(c, label);
+    b.textContent = f.label;
     b.addEventListener('click', () => chooseFilter(f.id));
     el.filterList.appendChild(b);
   }
@@ -1001,11 +989,10 @@ function renderCopy() {
   const n = CONFIG.shots;
   const lead = document.createElement('span');
   lead.className = 'lead';
-  lead.textContent = `${word(n).charAt(0).toUpperCase()}${word(n).slice(1)} photos.`;
+  lead.textContent = `${word(n).charAt(0).toUpperCase()}${word(n).slice(1)} photos`;
   el.instruction.textContent = '';
-  el.instruction.append(lead, ` A ${word(settings.countdown)}-second countdown before each one. Look at the camera, not the screen.`);
-  el.printNote.textContent =
-    settings.layout === 'single' ? 'Prints one copy in about a minute.' : 'Prints two copies in about a minute.';
+  el.instruction.append(lead, ' Look at the camera, not the screen.');
+  renderReviewCopy();
 }
 
 function applySettings(key) {
