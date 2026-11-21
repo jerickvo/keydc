@@ -74,9 +74,10 @@ export function composeStrip(frame, photos, { scale = 1, canvas = null, drawPhot
   return c;
 }
 
-// The 4x6 print sheet: two strips side by side (or one strip and a blank half).
+// The 4x6 print sheet: two copies of the strip side by side, so one cut down the
+// middle gives two strips.
 // The sheet is always 2:3. A strip that is not exactly 1:3 is fitted inside its half.
-export function composeSheet(strip, { layout = 'double', inset = 0 } = {}) {
+export function composeSheet(strip, { inset = 0 } = {}) {
   const cellW = strip.width;
   const cellH = Math.round(cellW * 3);
   const W = cellW * 2;
@@ -99,8 +100,7 @@ export function composeSheet(strip, { layout = 'double', inset = 0 } = {}) {
   const dw = strip.width * fit;
   const dh = strip.height * fit;
   const dy = oy + (innerH - dh) / 2;
-  const cells = layout === 'single' ? [0] : [0, 1];
-  for (const k of cells) {
+  for (const k of [0, 1]) {
     const dx = ox + k * half + (half - dw) / 2;
     ctx.drawImage(strip, dx, dy, dw, dh);
   }

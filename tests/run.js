@@ -471,21 +471,22 @@ test('print: stylesheet gives one 4x6 in page, sheet edge to edge, two copies', 
   await ctx.close();
 });
 
-test('print: "1 strip" layout leaves the right half blank; 100x148 mm option', async () => {
+test('print: always two copies, even with an old "1 strip" setting saved; 100x148 mm option', async () => {
   const ctx = await newContext();
   const page = await openApp(ctx, { init: [syntheticCamera], settings: { ...FAST, layout: 'single', pageSize: '100x148mm' } });
   await runSession(page);
   await preparePrint(page);
-  const file = path.join(OUT, 'print-single-100x148.pdf');
+  const file = path.join(OUT, 'print-100x148.pdf');
   await page.pdf({ path: file, preferCSSPageSize: true, printBackground: true });
   const info = pdfInfo(file);
   assert.equal(info.pages, 1);
   assert.ok(Math.abs(info.w - 283.46) < 0.6 && Math.abs(info.h - 419.53) < 0.6, `page is 100x148 mm, got ${info.w}x${info.h}`);
   const px = pdfPixels(file, 50);
-  const p = px.at(Math.round(px.w * 0.75), Math.round(px.h / 2));
-  assert.ok(p[0] > 245 && p[1] > 245 && p[2] > 245, `right half should be blank, got ${p}`);
-  const q = px.at(Math.round(px.w * 0.25), Math.round(px.h * 0.15));
-  assert.ok(!(q[0] > 245 && q[1] > 245 && q[2] > 245), 'left half holds the strip');
+  const white = (p) => p[0] > 245 && p[1] > 245 && p[2] > 245;
+  assert.ok(!white(px.at(Math.round(px.w * 0.25), Math.round(px.h * 0.15))), 'left half holds a strip');
+  assert.ok(!white(px.at(Math.round(px.w * 0.75), Math.round(px.h * 0.15))), 'right half holds a strip');
+  assert.equal(await page.evaluate(() => 'layout' in PB.settings), false, 'the old layout setting is ignored');
+  assert.equal(await page.isHidden('.seg[data-setting="layout"]'), true, 'no layout choice in the operator menu');
   await ctx.close();
 });
 
@@ -621,7 +622,7 @@ test('operator: opens with "o" or a 2 s corner hold; settings persist', async ()
   await page.waitForSelector('#operator:not([hidden])');
   await page.click('label.op-row:has(input[data-setting="sound"])');
   await page.click('.stepper[data-setting="countdown"] button[aria-label^="Increase"]');
-  await page.click('.seg[data-setting="layout"] button[data-value="single"]');
+  await page.click('.seg[data-setting="pageSize"] button[data-value="100x148mm"]');
   await page.click('label.op-row:has(input[data-setting="mirrorPreview"])');
   assert.equal(await page.evaluate(() => document.querySelector('#video').classList.contains('mirror')), false, 'mirror toggles live');
   await page.reload();
@@ -629,7 +630,7 @@ test('operator: opens with "o" or a 2 s corner hold; settings persist', async ()
   const s = await page.evaluate(() => ({ ...PB.settings }));
   assert.equal(s.sound, true);
   assert.equal(s.countdown, 2);
-  assert.equal(s.layout, 'single');
+  assert.equal(s.pageSize, '100x148mm');
   assert.equal(s.mirrorPreview, false);
   await ctx.close();
 });
@@ -694,7 +695,7 @@ test('saved sheets: printing stores the sheet, reprint, keep last 20, clear all'
   const n = await page.evaluate(async () => {
     const { saveSession, listSessions } = await import('./js/store.js');
     const blob = new Blob(['x'], { type: 'image/png' });
-    for (let i = 0; i < 22; i++) await saveSession({ sheetBlob: blob, thumbBlob: blob, layout: 'double' });
+    for (let i = 0; i < 22; i++) await saveSession({ sheetBlob: blob, thumbBlob: blob });
     return (await listSessions()).length;
   });
   assert.equal(n, 20, 'only the last 20 are kept');

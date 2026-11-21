@@ -58,9 +58,9 @@ const req2p = (req) =>
     req.onerror = () => reject(req.error);
   });
 
-export async function saveSession({ sheetBlob, thumbBlob, layout }) {
+export async function saveSession({ sheetBlob, thumbBlob }) {
   const id = await run('readwrite', async (st, set) => {
-    set(await req2p(st.add({ time: Date.now(), sheetBlob, thumbBlob, layout })));
+    set(await req2p(st.add({ time: Date.now(), sheetBlob, thumbBlob })));
   });
   await prune();
   return id;

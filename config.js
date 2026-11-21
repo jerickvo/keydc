@@ -41,7 +41,6 @@ export const CONFIG = {
     sound: true,
     flash: true,
     filters: true,
-    layout: 'double', // 'double' = 2 copies per sheet, 'single' = 1 strip, other half blank
     printLock: 60, // seconds the Print button stays disabled after printing
     idleReset: 90, // seconds of no activity on the review screen before starting over
     pageSize: '4x6in', // '4x6in' or '100x148mm'

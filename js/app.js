@@ -28,7 +28,6 @@ const el = {
   instruction: $('#instruction'),
   vfFlash: $('#vf-flash'),
   stripWrap: $('#strip-wrap'),
-  printingText: $('#printing-text'),
   review: $('#review'),
   strip: $('#strip'),
   holeButtons: $('#hole-buttons'),
@@ -459,7 +458,7 @@ function refreshResult() {
 
 async function prepareSheet() {
   const strip = composeStrip(state.frame, state.photos, { drawPhoto: filteredDrawer(state.filter) });
-  const sheet = composeSheet(strip, { layout: settings.layout, inset: settings.printInset });
+  const sheet = composeSheet(strip, { inset: settings.printInset });
   const sheetBlob = await canvasToBlob(sheet);
   return { strip, sheet, sheetBlob };
 }
@@ -486,7 +485,7 @@ function renderReviewCopy() {
     ? ['Retake a photo', 'Tap the photo you want to take again.']
     : el.review.classList.contains('filters-open')
       ? ['Filters', 'Pick a look for all four photos.']
-      : ['Your strip', settings.layout === 'single' ? 'Prints in about a minute.' : 'Prints two copies in about a minute.'];
+      : ['Your strip', 'Prints two copies in about a minute.'];
   if (el.reviewLead.textContent !== lead) el.reviewLead.textContent = lead;
   if (el.reviewSub.textContent !== sub) el.reviewSub.textContent = sub;
 }
@@ -593,7 +592,7 @@ async function storeSheet(prep) {
     tx.imageSmoothingQuality = 'high';
     tx.drawImage(prep.sheet, 0, 0, t.width, t.height);
     const thumbBlob = await canvasToBlob(t, 'image/jpeg', 0.82);
-    await saveSession({ sheetBlob: prep.sheetBlob, thumbBlob, layout: settings.layout });
+    await saveSession({ sheetBlob: prep.sheetBlob, thumbBlob });
     if (isOperatorOpen()) renderSessions();
   } catch (e) {
     log.warn('could not save the sheet for reprinting', e);
@@ -611,7 +610,7 @@ async function operatorPrint(blob) {
 async function testPrint() {
   const photos = makeSamplePhotos(state.frame);
   const strip = composeStrip(state.frame, photos);
-  const sheet = addEdgeGuides(composeSheet(strip, { layout: settings.layout, inset: settings.printInset }));
+  const sheet = addEdgeGuides(composeSheet(strip, { inset: settings.printInset }));
   const blob = await canvasToBlob(sheet);
   log.info('test print');
   await operatorPrint(blob);
@@ -625,10 +624,6 @@ async function reprint(session) {
 let printingTimer = null;
 function showPrinting() {
   setRetakeMode(false);
-  el.printingText.textContent =
-    settings.layout === 'single'
-      ? 'Your strip will be ready in about a minute.'
-      : 'Your strips will be ready in about a minute. There are two on the sheet, so cut it down the middle.';
   showScreen('printing');
   clearTimeout(printingTimer);
   printingTimer = setTimeout(leavePrinting, CONFIG.printingScreenMs);
@@ -1007,7 +1002,7 @@ function applySettings(key) {
     }
   }
   applyPageSize();
-  if ((key === 'layout' || key === 'printInset') && state.screen === 'review') refreshResult();
+  if (key === 'printInset' && state.screen === 'review') refreshResult();
 }
 
 // Keep the Chromebook screen on during the event.

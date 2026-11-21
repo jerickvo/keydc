@@ -69,7 +69,7 @@ To open it, hold the **top-left corner for 2 seconds**, or press **o**. Close it
 
 - **Camera:** the camera picker (remembered), and mirror toggles for the preview and the saved photo.
 - **Capture:** countdown, pause between shots, sound, flash, and filters on/off.
-- **Print:** layout (2 per sheet, or 1 + blank), page size (4×6 in or 100×148 mm), safety
+- **Print:** page size (4×6 in or 100×148 mm), safety
   margin, print lock seconds, the sheets-sent counter (−1 / Reset), and **Test print**.
 - **Saved sheets:** the last 20 printed sheets. Tap a sheet twice to reprint it.
   **Clear all** also needs two taps.
@@ -195,7 +195,7 @@ What they check:
 - **Compositing:** every hole holds photo pixels, and all of 7,000+ sampled opaque logo pixels over hole 4 sit on top.
 - **Preview:** the preview shows exactly the hole, with only the video mirrored.
 - **Printing:** the print stylesheet gives one 4×6 in page edge to edge with both copies
-  (`page.pdf` with `preferCSSPageSize`). The 1-strip layout and the 100×148 mm page work.
+  (`page.pdf` with `preferCSSPageSize`). The 100×148 mm page works too.
   A double tap is one job, and the lock and counter work.
 - **Operator menu:** it opens and settings persist. The camera picker prefers DJI and
   remembers the camera even when Chrome changes its id.
