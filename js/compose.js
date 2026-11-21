@@ -96,13 +96,20 @@ export function composeSheet(strip, { inset = 0 } = {}) {
   const innerW = W - 2 * ox;
   const innerH = H - 2 * oy;
   const half = innerW / 2;
-  const fit = Math.min(half / strip.width, innerH / strip.height);
+  // Each copy fills its half of the page. A strip that isn't exactly 1:3 is
+  // scaled to cover the half and the overflow (a few px of background) is cut off,
+  // so the page stays edge to edge with no white bars.
+  const fit = Math.max(half / strip.width, innerH / strip.height);
   const dw = strip.width * fit;
   const dh = strip.height * fit;
-  const dy = oy + (innerH - dh) / 2;
   for (const k of [0, 1]) {
-    const dx = ox + k * half + (half - dw) / 2;
-    ctx.drawImage(strip, dx, dy, dw, dh);
+    const cx = ox + k * half;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cx, oy, half, innerH);
+    ctx.clip();
+    ctx.drawImage(strip, cx + (half - dw) / 2, oy + (innerH - dh) / 2, dw, dh);
+    ctx.restore();
   }
   return c;
 }

@@ -18,11 +18,14 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'test-output');
 fs.mkdirSync(OUT, { recursive: true });
 
+// Measured on frame.png (591x1748).
+const FRAME = { w: 591, h: 1748 };
+const SHEET = { w: FRAME.w * 2, h: FRAME.w * 3 }; // 2:3, exactly a 4x6 in page
 const EXPECTED_HOLES = [
-  { x: 28, y: 83, w: 544, h: 371 },
-  { x: 28, y: 471, w: 544, h: 371 },
-  { x: 27, y: 857, w: 544, h: 370 },
-  { x: 27, y: 1241, w: 544, h: 370 },
+  { x: 28, y: 81, w: 535, h: 360 },
+  { x: 28, y: 458, w: 535, h: 359 },
+  { x: 27, y: 832, w: 535, h: 359 },
+  { x: 27, y: 1205, w: 535, h: 359 },
 ];
 
 const FAST = { countdown: 1, pause: 0.5, sound: false };
@@ -175,8 +178,8 @@ test('detect: hole detection finds the 4 measured holes', async () => {
     h: PB.state.frame.height,
   }));
   assert.equal(f.source, 'detected', 'holes should come from detection, not the config fallback');
-  assert.equal(f.w, 600);
-  assert.equal(f.h, 1800);
+  assert.equal(f.w, FRAME.w);
+  assert.equal(f.h, FRAME.h);
   assert.equal(f.holes.length, 4);
   f.holes.forEach((h, i) => {
     const e = EXPECTED_HOLES[i];
@@ -191,23 +194,23 @@ test('detect: hole detection finds the 4 measured holes', async () => {
 test('detect: works at another resolution and falls back to config', async () => {
   const ctx = await newContext();
   const page = await openApp(ctx);
-  const r = await page.evaluate(async () => {
+  const r = await page.evaluate(async ({ w, h }) => {
     const { detectHoles, fallbackHoles } = await import('./js/frame.js');
     const img = PB.state.frame.image;
     const big = document.createElement('canvas');
-    big.width = 1200;
-    big.height = 3600;
-    big.getContext('2d').drawImage(img, 0, 0, 1200, 3600);
+    big.width = w * 2;
+    big.height = h * 2;
+    big.getContext('2d').drawImage(img, 0, 0, w * 2, h * 2);
     const opaque = document.createElement('canvas');
-    opaque.width = 600;
-    opaque.height = 1800;
-    opaque.getContext('2d').fillRect(0, 0, 600, 1800);
+    opaque.width = w;
+    opaque.height = h;
+    opaque.getContext('2d').fillRect(0, 0, w, h);
     return {
       big: detectHoles(big).holes,
       none: detectHoles(opaque).found,
-      fb: fallbackHoles(1200, 3600),
+      fb: fallbackHoles(w * 2, h * 2),
     };
-  });
+  }, FRAME);
   r.big.forEach((h, i) => {
     const e = EXPECTED_HOLES[i];
     for (const k of ['x', 'y', 'w', 'h']) {
@@ -215,11 +218,11 @@ test('detect: works at another resolution and falls back to config', async () =>
     }
   });
   assert.equal(r.none, 0, 'an opaque frame has no holes');
-  assert.deepEqual(r.fb[0], { x: 56, y: 166, w: 1088, h: 742, area: 0 });
+  assert.deepEqual(r.fb[0], { x: 56, y: 162, w: 1070, h: 720, area: 0 });
   await ctx.close();
 });
 
-test('flow: 4 shots with the fake camera, strip is 600x1800', async () => {
+test('flow: 4 shots with the fake camera, strip is the size of frame.png', async () => {
   const ctx = await newContext();
   const page = await openApp(ctx);
   await page.waitForFunction(() => PB.camera.ready);
@@ -240,7 +243,7 @@ test('flow: 4 shots with the fake camera, strip is 600x1800', async () => {
     boxes: PB.state.frame.photoBoxes,
     cam: PB.camera.info(),
   }));
-  assert.deepEqual(r.strip, [600, 1800]);
+  assert.deepEqual(r.strip, [FRAME.w, FRAME.h]);
   assert.equal(r.photos.length, 4);
   assert.deepEqual(r.cam.width, 1920);
   // Full native resolution: the whole 1080 px height, centre-cropped to each hole's aspect.
@@ -351,7 +354,7 @@ test('preview: viewfinder shows exactly the hole, frame on top, mirrored video o
   await ctx.close();
 });
 
-test('download: strip PNG is 600x1800 and sheet PNG is 1200x1800', async () => {
+test('download: strip PNG is the size of frame.png and the sheet PNG is 2:3', async () => {
   const ctx = await newContext();
   const page = await openApp(ctx);
   await runSession(page);
@@ -368,8 +371,8 @@ test('download: strip PNG is 600x1800 and sheet PNG is 1200x1800', async () => {
     await d.saveAs(file);
     sizes[name.includes('sheet') ? 'sheet' : 'strip'] = pngSize(fs.readFileSync(file));
   }
-  assert.deepEqual(sizes.strip, { width: 600, height: 1800 });
-  assert.deepEqual(sizes.sheet, { width: 1200, height: 1800 });
+  assert.deepEqual(sizes.strip, { width: FRAME.w, height: FRAME.h });
+  assert.deepEqual(sizes.sheet, { width: SHEET.w, height: SHEET.h });
   await ctx.close();
 });
 
@@ -449,7 +452,7 @@ test('print: stylesheet gives one 4x6 in page, sheet edge to edge, two copies', 
     const p = await PB.state.prep;
     return [p.sheet.width, p.sheet.height];
   });
-  assert.deepEqual(sheet, [1200, 1800], 'print sheet canvas is 1200x1800');
+  assert.deepEqual(sheet, [SHEET.w, SHEET.h], `print sheet canvas is ${SHEET.w}x${SHEET.h}`);
   const file = path.join(OUT, 'print-4x6.pdf');
   await page.pdf({ path: file, preferCSSPageSize: true, printBackground: true });
   const info = pdfInfo(file);
@@ -713,7 +716,7 @@ test('test print: prints a 4x6 sheet with sample photos and edge guides', async 
   await page.click('#op-test-print');
   await page.waitForFunction(() => window.__printCalls === 1, null, { timeout: 5000 });
   const size = await page.evaluate(() => [document.querySelector('#print-img').naturalWidth, document.querySelector('#print-img').naturalHeight]);
-  assert.deepEqual(size, [1200, 1800]);
+  assert.deepEqual(size, [SHEET.w, SHEET.h]);
   const file = path.join(OUT, 'test-print.pdf');
   await page.pdf({ path: file, preferCSSPageSize: true, printBackground: true });
   const info = pdfInfo(file);

@@ -36,7 +36,7 @@
   --gap: clamp(16px, 2.8vw, 48px);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --frame-ar: 1 / 3;
-  --hole-ar: 1.4663; /* set from frame.png at load */
+  --hole-ar: 1.4903; /* set from frame.png at load */
 }
 
 @supports (height: 100dvh) {

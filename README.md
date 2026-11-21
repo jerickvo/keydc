@@ -16,7 +16,7 @@ DJI Osmo Pocket 3 (USB webcam mode), puts them into `frame.png`, and prints a
 | `index.html`, `styles.css` | The page and its look (see `DESIGN.md`) |
 | `fonts/` | Archivo, self-hosted so the booth looks the same offline (SIL Open Font License) |
 | `config.js` | Defaults, plus the fallback hole positions for the frame |
-| `frame.png` | The strip frame (600×1800 RGBA, transparent holes) |
+| `frame.png` | The strip frame (591×1748 RGBA, transparent holes) |
 | `js/` | App code: camera, frame and hole detection, composing, printing, operator menu, filters |
 | `sw.js` | Offline cache. **Bump `VERSION` on every deploy** |
 | `manifest.webmanifest`, `icons/` | Lets Chrome install it as a full-screen app |
@@ -191,7 +191,8 @@ Screenshots and PDFs go to `test-output/`.
 What they check:
 
 - **Frame:** hole detection returns the 4 measured boxes (and works at 2× resolution).
-- **Sizes:** the strip is 600×1800 and the sheet is 1200×1800, with full-resolution crops.
+- **Sizes:** the strip is the size of `frame.png` (591×1748) and the sheet is 1182×1773 (2:3,
+  a 4×6 page), with full-resolution crops.
 - **Compositing:** every hole holds photo pixels, and all of 7,000+ sampled opaque logo pixels over hole 4 sit on top.
 - **Preview:** the preview shows exactly the hole, with only the video mirrored.
 - **Printing:** the print stylesheet gives one 4×6 in page edge to edge with both copies

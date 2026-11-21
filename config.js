@@ -6,18 +6,18 @@ export const CONFIG = {
   frameUrl: 'frame.png',
   shots: 4,
 
-  // Hole boxes measured on the original 600x1800 frame (inclusive pixel ranges).
+  // Hole boxes measured on the 591x1748 frame (inclusive pixel ranges).
   // The app detects the holes automatically from frame.png's alpha channel.
   // These numbers are only used if detection does not find exactly 4 holes,
   // and they are scaled to the real size of frame.png.
   fallbackHoles: {
-    refWidth: 600,
-    refHeight: 1800,
+    refWidth: 591,
+    refHeight: 1748,
     boxes: [
-      { x1: 28, x2: 571, y1: 83, y2: 453 },
-      { x1: 28, x2: 571, y1: 471, y2: 841 },
-      { x1: 27, x2: 570, y1: 857, y2: 1226 },
-      { x1: 27, x2: 570, y1: 1241, y2: 1610 },
+      { x1: 28, x2: 562, y1: 81, y2: 440 },
+      { x1: 28, x2: 562, y1: 458, y2: 816 },
+      { x1: 27, x2: 561, y1: 832, y2: 1190 },
+      { x1: 27, x2: 561, y1: 1205, y2: 1563 },
     ],
   },
   holeAlphaThreshold: 16, // a pixel with alpha below this counts as transparent
