@@ -2,7 +2,7 @@
 
 A full-screen photo booth for Chrome on a Chromebook. It takes 4 photos with a
 DJI Osmo Pocket 3 (USB webcam mode), puts them into `frame.png`, and prints a
-4×6 sheet with two strips on a Canon SELPHY CP1500.
+100×148 mm postcard (KP-108IN paper) with two strips on a Canon SELPHY CP1500.
 
 - Plain HTML, CSS and JavaScript. No build step, no backend, no accounts, no analytics.
 - Works offline after the first visit (service worker).
@@ -69,8 +69,7 @@ To open it, hold the **top-left corner for 2 seconds**, or press **o**. Close it
 
 - **Camera:** the camera picker (remembered), and mirror toggles for the preview and the saved photo.
 - **Capture:** countdown, pause between shots, sound, flash, and filters on/off.
-- **Print:** page size (4×6 in or 100×148 mm), safety
-  margin, print lock seconds, the sheets-sent counter (−1 / Reset), and **Test print**.
+- **Print:** safety margin, print lock seconds, the sheets-sent counter (−1 / Reset), and **Test print**.
 - **Saved sheets:** the last 20 printed sheets. Tap a sheet twice to reprint it.
   **Clear all** also needs two taps.
 - **Booth:** idle reset seconds, Full screen, Reload, frame and offline status, and a log.
@@ -125,9 +124,8 @@ To open it, hold the **top-left corner for 2 seconds**, or press **o**. Close it
       - Black (or black and magenta) missing: the printer crops about that much from each
         side, so the frame's outer edge gets trimmed. If that matters, set **Safety
         margin** to 1–2 % and print the test again.
-      - White borders on paper, or the preview looks scaled: try **Page size → 100×148 mm**.
-- [ ] **The print dialog defaults to 4×6.** Run a session and tap **Print**. Chrome's dialog
-      should show Destination **Canon SELPHY CP1500**, Paper size **4 × 6 in / Postcard
+- [ ] **The print dialog defaults to 100 × 148 mm.** Run a session and tap **Print**. Chrome's
+      dialog should show Destination **Canon SELPHY CP1500**, Paper size **Postcard
       (100 × 148 mm)**, Margins **Default** or **None**, Scale **Default**, 1 page, and a
       preview with the two strips filling the page. If anything differs, fix it once; Chrome
       remembers the last settings for this printer.
@@ -191,12 +189,12 @@ Screenshots and PDFs go to `test-output/`.
 What they check:
 
 - **Frame:** hole detection returns the 4 measured boxes (and works at 2× resolution).
-- **Sizes:** the strip is the size of `frame.png` (591×1748) and the sheet is 1182×1773 (2:3,
-  a 4×6 page), with full-resolution crops.
+- **Sizes:** the strip is the size of `frame.png` (591×1748, which is 50×148 mm) and the sheet is
+  1182×1749, the shape of a 100×148 mm page, with full-resolution crops.
 - **Compositing:** every hole holds photo pixels, and all of 7,000+ sampled opaque logo pixels over hole 4 sit on top.
 - **Preview:** the preview shows exactly the hole, with only the video mirrored.
-- **Printing:** the print stylesheet gives one 4×6 in page edge to edge with both copies
-  (`page.pdf` with `preferCSSPageSize`). The 100×148 mm page works too.
+- **Printing:** the print stylesheet gives one 100×148 mm page with both copies at their own
+  size, nothing cropped (`page.pdf` with `preferCSSPageSize`).
   A double tap is one job, and the lock and counter work.
 - **Operator menu:** it opens and settings persist. The camera picker prefers DJI and
   remembers the camera even when Chrome changes its id.

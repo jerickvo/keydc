@@ -2,14 +2,11 @@
 // exactly the page size, with @page size set in CSS so the paper size does not
 // depend on what the operator picks in the dialog.
 import { settings, readNumber, writeNumber } from './settings.js';
+import { CONFIG } from '../config.js';
 
 const COUNT_KEY = 'stkeyclub.sheetsSent';
 const LOCK_KEY = 'stkeyclub.printLockUntil';
 
-export const PAGE_SIZES = {
-  '4x6in': { w: '4in', h: '6in', label: '4 × 6 in' },
-  '100x148mm': { w: '100mm', h: '148mm', label: '100 × 148 mm' },
-};
 
 let area = null;
 let img = null;
@@ -29,7 +26,7 @@ export function initPrint() {
 }
 
 export function applyPageSize() {
-  const p = PAGE_SIZES[settings.pageSize] || PAGE_SIZES['4x6in'];
+  const p = { w: `${CONFIG.page.widthMm}mm`, h: `${CONFIG.page.heightMm}mm` };
   let st = document.getElementById('page-style');
   if (!st) {
     st = document.createElement('style');

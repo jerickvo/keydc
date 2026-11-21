@@ -43,11 +43,14 @@ export const CONFIG = {
     filters: true,
     printLock: 60, // seconds the Print button stays disabled after printing
     idleReset: 90, // seconds of no activity on the review screen before starting over
-    pageSize: '4x6in', // '4x6in' or '100x148mm'
     printInset: 0, // percent of white safety margin around the sheet (0 = edge to edge)
     cameraId: '',
     cameraLabel: '',
   },
+
+  // The paper: Canon KP-108IN postcard size. The frame is drawn for half of it
+  // (50 x 148 mm), so two strips fit side by side at their own size.
+  page: { widthMm: 100, heightMm: 148 },
 
   paperPack: 108, // sheets in a Canon KP-108IN pack
   maxSessions: 20, // finished sheets kept on the device for reprinting

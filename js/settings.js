@@ -14,7 +14,6 @@ export const RULES = {
   filters: { type: 'bool' },
   printLock: { type: 'num', min: 0, max: 300, step: 5 },
   idleReset: { type: 'num', min: 15, max: 600, step: 15 },
-  pageSize: { type: 'enum', values: ['4x6in', '100x148mm'] },
   printInset: { type: 'num', min: 0, max: 5, step: 0.5 },
   cameraId: { type: 'str' },
   cameraLabel: { type: 'str' },

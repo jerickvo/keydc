@@ -20,7 +20,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
 // Measured on frame.png (591x1748).
 const FRAME = { w: 591, h: 1748 };
-const SHEET = { w: FRAME.w * 2, h: FRAME.w * 3 }; // 2:3, exactly a 4x6 in page
+const SHEET = { w: FRAME.w * 2, h: Math.round((FRAME.w * 2 * 148) / 100) }; // the shape of a 100 x 148 mm page
 const EXPECTED_HOLES = [
   { x: 28, y: 81, w: 535, h: 360 },
   { x: 28, y: 458, w: 535, h: 359 },
@@ -443,7 +443,7 @@ async function preparePrint(page) {
   });
 }
 
-test('print: stylesheet gives one 4x6 in page, sheet edge to edge, two copies', async () => {
+test('print: one 100x148 mm page, both strips at their own size, nothing cropped', async () => {
   const ctx = await newContext();
   const page = await openApp(ctx, { init: [syntheticCamera] });
   await runSession(page);
@@ -453,33 +453,52 @@ test('print: stylesheet gives one 4x6 in page, sheet edge to edge, two copies', 
     return [p.sheet.width, p.sheet.height];
   });
   assert.deepEqual(sheet, [SHEET.w, SHEET.h], `print sheet canvas is ${SHEET.w}x${SHEET.h}`);
-  const file = path.join(OUT, 'print-4x6.pdf');
+  const file = path.join(OUT, 'print-100x148.pdf');
   await page.pdf({ path: file, preferCSSPageSize: true, printBackground: true });
   const info = pdfInfo(file);
   assert.equal(info.pages, 1, 'exactly one page');
-  assert.ok(Math.abs(info.w - 288) < 0.5 && Math.abs(info.h - 432) < 0.5, `page is 4x6 in (288x432 pt), got ${info.w}x${info.h}`);
-  const px = pdfPixels(file, 50); // 200 x 300
+  assert.ok(Math.abs(info.w - 283.46) < 0.6 && Math.abs(info.h - 419.53) < 0.6, `page is 100x148 mm (283.5x419.5 pt), got ${info.w}x${info.h}`);
+  // Each half of the sheet is the strip itself, pixel for pixel: no scaling, no cropping.
+  const same = await page.evaluate(async () => {
+    const p = await PB.state.prep;
+    const s = p.strip.getContext('2d').getImageData(0, 0, p.strip.width, p.strip.height).data;
+    const ctx = p.sheet.getContext('2d');
+    const dy = Math.round((p.sheet.height - p.strip.height) / 2);
+    let worst = 0;
+    for (const ox of [0, p.strip.width]) {
+      const d = ctx.getImageData(ox, dy, p.strip.width, p.strip.height).data;
+      for (let i = 0; i < d.length; i += 4 * 97) worst = Math.max(worst, Math.abs(d[i] - s[i]), Math.abs(d[i + 1] - s[i + 1]), Math.abs(d[i + 2] - s[i + 2]));
+    }
+    return worst;
+  });
+  assert.ok(same <= 2, `both copies are the full, unscaled strip (max channel diff ${same})`);
+  const px = pdfPixels(file, 127); // 127 dpi = 5 px per mm: 500 x 740, each half exactly 250 px
+  const half = Math.floor(px.w / 2);
   const white = (p) => p[0] > 245 && p[1] > 245 && p[2] > 245;
   // Corners and edge midpoints should be frame artwork, not white paper.
-  const probes = [[1, 1], [px.w - 2, 1], [1, px.h - 2], [px.w - 2, px.h - 2], [px.w / 2 - 2, 1], [px.w / 2 + 2, px.h - 2]];
-  for (const [x, y] of probes) assert.ok(!white(px.at(Math.round(x), Math.round(y))), `edge pixel ${x},${y} is white – sheet not edge to edge`);
-  // Both halves hold the same strip.
-  let diff = 0;
-  for (let y = 5; y < px.h; y += 7) for (let x = 3; x < px.w / 2; x += 5) {
+  const probes = [[1, 1], [px.w - 2, 1], [1, px.h - 2], [px.w - 2, px.h - 2], [half - 2, 1], [half + 2, px.h - 2]];
+  for (const [x, y] of probes) assert.ok(!white(px.at(x, y)), `edge pixel ${x},${y} is white – sheet not edge to edge`);
+  // Both halves of the printed page hold the same strip. (The exact check is on the
+  // sheet above; on the rendered page the second copy can land a fraction of a pixel
+  // over, so this compares the average difference, not the worst pixel.)
+  let sum = 0;
+  let n = 0;
+  for (let y = 5; y < px.h - 2; y += 7) for (let x = 3; x < half - 3; x += 5) {
     const a = px.at(x, y);
-    const b = px.at(x + px.w / 2, y);
-    diff = Math.max(diff, Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+    const b = px.at(x + half, y);
+    sum += (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2])) / 3;
+    n++;
   }
-  assert.ok(diff < 40, `left and right copies differ (max channel diff ${diff})`);
+  assert.ok(sum / n < 6, `left and right copies differ (mean channel diff ${(sum / n).toFixed(2)})`);
   await ctx.close();
 });
 
-test('print: always two copies, even with an old "1 strip" setting saved; 100x148 mm option', async () => {
+test('print: old "1 strip" and "4x6 in" settings saved on a device are ignored', async () => {
   const ctx = await newContext();
-  const page = await openApp(ctx, { init: [syntheticCamera], settings: { ...FAST, layout: 'single', pageSize: '100x148mm' } });
+  const page = await openApp(ctx, { init: [syntheticCamera], settings: { ...FAST, layout: 'single', pageSize: '4x6in' } });
   await runSession(page);
   await preparePrint(page);
-  const file = path.join(OUT, 'print-100x148.pdf');
+  const file = path.join(OUT, 'print-old-settings.pdf');
   await page.pdf({ path: file, preferCSSPageSize: true, printBackground: true });
   const info = pdfInfo(file);
   assert.equal(info.pages, 1);
@@ -489,7 +508,8 @@ test('print: always two copies, even with an old "1 strip" setting saved; 100x14
   assert.ok(!white(px.at(Math.round(px.w * 0.25), Math.round(px.h * 0.15))), 'left half holds a strip');
   assert.ok(!white(px.at(Math.round(px.w * 0.75), Math.round(px.h * 0.15))), 'right half holds a strip');
   assert.equal(await page.evaluate(() => 'layout' in PB.settings), false, 'the old layout setting is ignored');
-  assert.equal(await page.isHidden('.seg[data-setting="layout"]'), true, 'no layout choice in the operator menu');
+  assert.equal(await page.evaluate(() => 'pageSize' in PB.settings), false, 'the old page size setting is ignored');
+  assert.equal(await page.$$eval('.op-panel .seg', (s) => s.length), 0, 'no layout or page size choice in the operator menu');
   await ctx.close();
 });
 
@@ -625,7 +645,7 @@ test('operator: opens with "o" or a 2 s corner hold; settings persist', async ()
   await page.waitForSelector('#operator:not([hidden])');
   await page.click('label.op-row:has(input[data-setting="sound"])');
   await page.click('.stepper[data-setting="countdown"] button[aria-label^="Increase"]');
-  await page.click('.seg[data-setting="pageSize"] button[data-value="100x148mm"]');
+  await page.click('.stepper[data-setting="printInset"] button[aria-label^="Increase"]');
   await page.click('label.op-row:has(input[data-setting="mirrorPreview"])');
   assert.equal(await page.evaluate(() => document.querySelector('#video').classList.contains('mirror')), false, 'mirror toggles live');
   await page.reload();
@@ -633,7 +653,7 @@ test('operator: opens with "o" or a 2 s corner hold; settings persist', async ()
   const s = await page.evaluate(() => ({ ...PB.settings }));
   assert.equal(s.sound, true);
   assert.equal(s.countdown, 2);
-  assert.equal(s.pageSize, '100x148mm');
+  assert.equal(s.printInset, 0.5);
   assert.equal(s.mirrorPreview, false);
   await ctx.close();
 });
@@ -709,7 +729,7 @@ test('saved sheets: printing stores the sheet, reprint, keep last 20, clear all'
   await ctx.close();
 });
 
-test('test print: prints a 4x6 sheet with sample photos and edge guides', async () => {
+test('test print: prints a 100x148 mm sheet with sample photos and edge guides', async () => {
   const ctx = await newContext();
   const page = await openApp(ctx, { init: [stubPrint] });
   await page.keyboard.press('o');

@@ -1418,8 +1418,8 @@ label.op-row {
 
   body > #print-area {
     display: block !important;
-    width: var(--page-w, 4in);
-    height: var(--page-h, 6in);
+    width: var(--page-w, 100mm);
+    height: var(--page-h, 148mm);
     overflow: hidden;
     break-inside: avoid;
     page-break-inside: avoid;
@@ -1429,6 +1429,6 @@ label.op-row {
     display: block;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain; /* the sheet already has the page's shape; never crop it */
   }
 }

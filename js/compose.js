@@ -1,5 +1,6 @@
 // Capturing, strip and sheet composition.
 import { makeCanvas } from './util.js';
+import { CONFIG } from '../config.js';
 
 const EMPTY_HOLE = '#1b1724';
 
@@ -74,14 +75,13 @@ export function composeStrip(frame, photos, { scale = 1, canvas = null, drawPhot
   return c;
 }
 
-// The 4x6 print sheet: two copies of the strip side by side, so one cut down the
-// middle gives two strips.
+// The print sheet: two copies of the strip side by side on one 100 x 148 mm page,
+// so one cut down the middle gives two strips. The sheet has the page's exact
+// proportions, and each strip is fitted inside its half, never cropped.
 // The sheet is always 2:3. A strip that is not exactly 1:3 is fitted inside its half.
 export function composeSheet(strip, { inset = 0 } = {}) {
-  const cellW = strip.width;
-  const cellH = Math.round(cellW * 3);
-  const W = cellW * 2;
-  const H = cellH;
+  const W = strip.width * 2;
+  const H = Math.round((W * CONFIG.page.heightMm) / CONFIG.page.widthMm);
   const c = makeCanvas(W, H);
   const ctx = c.getContext('2d');
   ctx.imageSmoothingEnabled = true;
@@ -96,20 +96,15 @@ export function composeSheet(strip, { inset = 0 } = {}) {
   const innerW = W - 2 * ox;
   const innerH = H - 2 * oy;
   const half = innerW / 2;
-  // Each copy fills its half of the page. A strip that isn't exactly 1:3 is
-  // scaled to cover the half and the overflow (a few px of background) is cut off,
-  // so the page stays edge to edge with no white bars.
-  const fit = Math.max(half / strip.width, innerH / strip.height);
+  // Fit, don't crop. A frame made for the paper (591 x 1748 is 50 x 148 mm) lands
+  // at exactly its own size, pixel for pixel.
+  let fit = Math.min(half / strip.width, innerH / strip.height);
+  if (Math.abs(fit - 1) < 0.005) fit = 1;
   const dw = strip.width * fit;
   const dh = strip.height * fit;
+  const dy = Math.round(oy + (innerH - dh) / 2);
   for (const k of [0, 1]) {
-    const cx = ox + k * half;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(cx, oy, half, innerH);
-    ctx.clip();
-    ctx.drawImage(strip, cx + (half - dw) / 2, oy + (innerH - dh) / 2, dw, dh);
-    ctx.restore();
+    ctx.drawImage(strip, Math.round(ox + k * half + (half - dw) / 2), dy, dw, dh);
   }
   return c;
 }

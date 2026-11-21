@@ -58,7 +58,7 @@ export function makeSamplePhotos(frame) {
   });
 }
 
-// Draw guide lines on a 4x6 sheet canvas: black at the very edge, then
+// Draw guide lines on a sheet canvas: black at the very edge, then
 // magenta / teal / yellow at 1 / 2 / 3 mm. Whatever is missing on paper was cropped.
 export function addEdgeGuides(sheet) {
   const ctx = sheet.getContext('2d');
